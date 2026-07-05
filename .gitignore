@@ -1,0 +1,14 @@
+.DS_Store
+
+# SwiftPM build output
+.build/
+work/codex-statusbar/.build/
+
+# Local deliverables and generated app bundles
+outputs/CodexStatusBar.app/
+outputs/codex-status
+outputs/.DS_Store
+
+# Temporary experiments and reference clones
+work/remote-codex-status-bar/
+work/test-status/

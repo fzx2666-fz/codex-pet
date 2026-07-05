@@ -26,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var floatingWindow: NSWindow?
     private var floatingTitleLabel: NSTextField?
+    private var floatingStatusLabel: NSTextField?
+    private var floatingStatusDot: StatusDotView?
     private var timer: Timer?
     private var currentStatus = CodexTaskStatus.empty
     private let stateDirURL = resolveStatusBarStateDirURL()
@@ -256,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeFloatingStatusWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 180, height: 36),
+            contentRect: NSRect(x: 0, y: 0, width: 212, height: 48),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -266,46 +268,96 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.hasShadow = true
+        window.hasShadow = false
         window.ignoresMouseEvents = false
 
-        let container = NSView(frame: window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 180, height: 36))
-        container.wantsLayer = true
-        container.layer?.cornerRadius = 12
-        container.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
-        container.layer?.borderWidth = 1
-        container.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
+        let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 212, height: 48)
+        let material = NSVisualEffectView(frame: bounds)
+        material.material = .hudWindow
+        material.blendingMode = .behindWindow
+        material.state = .active
+        material.wantsLayer = true
+        material.layer?.cornerRadius = 18
+        material.layer?.masksToBounds = true
 
-        let title = NSTextField(labelWithString: "Codex -")
-        title.frame = NSRect(x: 12, y: 9, width: 156, height: 18)
-        title.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .bold)
+        let hairline = NSView(frame: bounds)
+        hairline.wantsLayer = true
+        hairline.layer?.cornerRadius = 18
+        hairline.layer?.borderWidth = 0.5
+        hairline.layer?.borderColor = NSColor.black.withAlphaComponent(0.10).cgColor
+        hairline.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.06).cgColor
+
+        let dot = StatusDotView(frame: NSRect(x: 17, y: 17, width: 14, height: 14))
+
+        let title = NSTextField(labelWithString: "Codex")
+        title.frame = NSRect(x: 42, y: 23, width: 150, height: 17)
+        title.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
         title.textColor = .labelColor
 
-        container.addSubview(title)
-        window.contentView = container
+        let status = NSTextField(labelWithString: "idle")
+        status.frame = NSRect(x: 42, y: 8, width: 150, height: 15)
+        status.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        status.textColor = .secondaryLabelColor
+
+        material.addSubview(hairline)
+        material.addSubview(dot)
+        material.addSubview(title)
+        material.addSubview(status)
+        window.contentView = material
 
         floatingWindow = window
         floatingTitleLabel = title
+        floatingStatusLabel = status
+        floatingStatusDot = dot
         positionFloatingWindow()
         window.orderFrontRegardless()
     }
 
     private func renderFloatingWindow(for status: CodexTaskStatus) {
-        floatingTitleLabel?.stringValue = floatingTitle(for: status)
+        floatingTitleLabel?.stringValue = "Codex"
+        floatingStatusLabel?.stringValue = floatingStatusWord(for: status)
+        floatingStatusLabel?.textColor = floatingStatusTextColor(for: status)
+        floatingStatusDot?.setColor(floatingStatusColor(for: status), isPulsing: status.state == .running)
         positionFloatingWindow()
         floatingWindow?.orderFrontRegardless()
     }
 
-    private func floatingTitle(for status: CodexTaskStatus) -> String {
+    private func floatingStatusWord(for status: CodexTaskStatus) -> String {
         switch status.state {
         case .idle:
-            return "Codex idle"
+            return "idle"
         case .running:
-            return "Codex running"
+            return "running"
         case .done:
-            return "Codex done"
+            return "done"
         case .error:
-            return "Codex done"
+            return "done"
+        }
+    }
+
+    private func floatingStatusColor(for status: CodexTaskStatus) -> NSColor {
+        switch status.state {
+        case .idle:
+            return NSColor.systemGray
+        case .running:
+            return NSColor.systemBlue
+        case .done:
+            return NSColor.systemGreen
+        case .error:
+            return NSColor.systemOrange
+        }
+    }
+
+    private func floatingStatusTextColor(for status: CodexTaskStatus) -> NSColor {
+        switch status.state {
+        case .idle:
+            return .secondaryLabelColor
+        case .running:
+            return .labelColor
+        case .done:
+            return .secondaryLabelColor
+        case .error:
+            return .labelColor
         }
     }
 
@@ -375,6 +427,77 @@ struct HookSessionRecord: Decodable {
         state = try container.decodeIfPresent(String.self, forKey: .state) ?? "idle"
         label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
         ts = try container.decodeIfPresent(Double.self, forKey: .ts) ?? 0
+    }
+}
+
+final class StatusDotView: NSView {
+    private let fillLayer = CALayer()
+    private let glowLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupLayers()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupLayers()
+    }
+
+    private func setupLayers() {
+        wantsLayer = true
+        layer?.masksToBounds = false
+
+        glowLayer.frame = bounds.insetBy(dx: -4, dy: -4)
+        glowLayer.cornerRadius = glowLayer.frame.width / 2
+        glowLayer.opacity = 0.24
+
+        fillLayer.frame = bounds
+        fillLayer.cornerRadius = bounds.width / 2
+        fillLayer.borderWidth = 1
+        fillLayer.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
+
+        layer?.addSublayer(glowLayer)
+        layer?.addSublayer(fillLayer)
+    }
+
+    override func layout() {
+        super.layout()
+        glowLayer.frame = bounds.insetBy(dx: -4, dy: -4)
+        glowLayer.cornerRadius = glowLayer.frame.width / 2
+        fillLayer.frame = bounds
+        fillLayer.cornerRadius = bounds.width / 2
+    }
+
+    func setColor(_ color: NSColor, isPulsing: Bool) {
+        fillLayer.backgroundColor = color.cgColor
+        glowLayer.backgroundColor = color.cgColor
+
+        if isPulsing {
+            startPulse()
+        } else {
+            stopPulse()
+        }
+    }
+
+    private func startPulse() {
+        if glowLayer.animation(forKey: "pulse") != nil {
+            return
+        }
+
+        let animation = CABasicAnimation(keyPath: "opacity")
+        animation.fromValue = 0.18
+        animation.toValue = 0.62
+        animation.duration = 0.9
+        animation.autoreverses = true
+        animation.repeatCount = .infinity
+        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        glowLayer.add(animation, forKey: "pulse")
+    }
+
+    private func stopPulse() {
+        glowLayer.removeAnimation(forKey: "pulse")
+        glowLayer.opacity = 0.24
     }
 }
 

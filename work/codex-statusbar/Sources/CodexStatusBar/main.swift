@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var floatingWindow: NSWindow?
     private var floatingTitleLabel: NSTextField?
     private var floatingStatusLabel: NSTextField?
-    private var floatingStatusDot: StatusDotView?
+    private var floatingCatView: CatStatusView?
     private var timer: Timer?
     private var currentStatus = CodexTaskStatus.empty
     private let stateDirURL = resolveStatusBarStateDirURL()
@@ -311,7 +311,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeFloatingStatusWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 212, height: 48),
+            contentRect: NSRect(x: 0, y: 0, width: 126, height: 62),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -326,36 +326,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = true
         window.delegate = self
 
-        let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 212, height: 48)
+        let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 126, height: 62)
         let material = NSVisualEffectView(frame: bounds)
         material.material = .hudWindow
         material.blendingMode = .behindWindow
         material.state = .active
         material.wantsLayer = true
-        material.layer?.cornerRadius = 18
+        material.layer?.cornerRadius = 20
         material.layer?.masksToBounds = true
 
         let hairline = NSView(frame: bounds)
         hairline.wantsLayer = true
-        hairline.layer?.cornerRadius = 18
+        hairline.layer?.cornerRadius = 20
         hairline.layer?.borderWidth = 0.5
         hairline.layer?.borderColor = NSColor.black.withAlphaComponent(0.10).cgColor
         hairline.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.06).cgColor
 
-        let dot = StatusDotView(frame: NSRect(x: 17, y: 17, width: 14, height: 14))
+        let cat = CatStatusView(frame: NSRect(x: 8, y: 6, width: 58, height: 50))
 
         let title = NSTextField(labelWithString: "Codex")
-        title.frame = NSRect(x: 42, y: 23, width: 150, height: 17)
-        title.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        title.frame = NSRect(x: 70, y: 34, width: 45, height: 16)
+        title.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         title.textColor = .labelColor
+        title.isHidden = true
 
         let status = NSTextField(labelWithString: "idle")
-        status.frame = NSRect(x: 42, y: 8, width: 150, height: 15)
-        status.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        status.frame = NSRect(x: 67, y: 22, width: 50, height: 17)
+        status.alignment = .center
+        status.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
         status.textColor = .secondaryLabelColor
 
         material.addSubview(hairline)
-        material.addSubview(dot)
+        material.addSubview(cat)
         material.addSubview(title)
         material.addSubview(status)
         window.contentView = material
@@ -363,7 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         floatingWindow = window
         floatingTitleLabel = title
         floatingStatusLabel = status
-        floatingStatusDot = dot
+        floatingCatView = cat
         positionFloatingWindow()
         window.orderFrontRegardless()
     }
@@ -371,8 +373,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func renderFloatingWindow(for status: CodexTaskStatus) {
         floatingTitleLabel?.stringValue = "Codex"
         floatingStatusLabel?.stringValue = floatingStatusWord(for: status)
+        floatingStatusLabel?.font = floatingStatusFont(for: status)
         floatingStatusLabel?.textColor = floatingStatusTextColor(for: status)
-        floatingStatusDot?.setColor(floatingStatusColor(for: status), isPulsing: status.state == .running)
+        floatingCatView?.setState(status.state)
         positionFloatingWindow()
         floatingWindow?.orderFrontRegardless()
     }
@@ -390,6 +393,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .error:
             return "error"
         }
+    }
+
+    private func floatingStatusFont(for status: CodexTaskStatus) -> NSFont {
+        let size: CGFloat = status.state == .running || status.state == .closed ? 9 : 11
+        return NSFont.monospacedSystemFont(ofSize: size, weight: .semibold)
     }
 
     private func floatingStatusColor(for status: CodexTaskStatus) -> NSColor {
@@ -516,74 +524,157 @@ struct HookSessionRecord: Decodable {
     }
 }
 
-final class StatusDotView: NSView {
-    private let fillLayer = CALayer()
-    private let glowLayer = CALayer()
+final class CatStatusView: NSView {
+    private struct SpriteFrame {
+        let column: Int
+        let row: Int
+    }
+
+    private var state: TaskState = .idle
+    private var phase: CGFloat = 0
+    private var animationTimer: Timer?
+    private let spriteImage = NSImage(named: "oneko") ?? NSImage(contentsOf: Bundle.module.url(forResource: "oneko", withExtension: "gif") ?? URL(fileURLWithPath: ""))
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        setupLayers()
+        startAnimation()
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        setupLayers()
+        startAnimation()
     }
 
-    private func setupLayers() {
+    deinit {
+        animationTimer?.invalidate()
+    }
+
+    func setState(_ state: TaskState) {
+        guard self.state != state else {
+            return
+        }
+        self.state = state
+        needsDisplay = true
+    }
+
+    private func startAnimation() {
         wantsLayer = true
         layer?.masksToBounds = false
-
-        glowLayer.frame = bounds.insetBy(dx: -4, dy: -4)
-        glowLayer.cornerRadius = glowLayer.frame.width / 2
-        glowLayer.opacity = 0.24
-
-        fillLayer.frame = bounds
-        fillLayer.cornerRadius = bounds.width / 2
-        fillLayer.borderWidth = 1
-        fillLayer.borderColor = NSColor.white.withAlphaComponent(0.55).cgColor
-
-        layer?.addSublayer(glowLayer)
-        layer?.addSublayer(fillLayer)
-    }
-
-    override func layout() {
-        super.layout()
-        glowLayer.frame = bounds.insetBy(dx: -4, dy: -4)
-        glowLayer.cornerRadius = glowLayer.frame.width / 2
-        fillLayer.frame = bounds
-        fillLayer.cornerRadius = bounds.width / 2
-    }
-
-    func setColor(_ color: NSColor, isPulsing: Bool) {
-        fillLayer.backgroundColor = color.cgColor
-        glowLayer.backgroundColor = color.cgColor
-
-        if isPulsing {
-            startPulse()
-        } else {
-            stopPulse()
+        animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 24.0, repeats: true) { [weak self] _ in
+            guard let self else {
+                return
+            }
+            self.phase += self.state == .running ? 0.34 : 0.16
+            self.needsDisplay = true
         }
     }
 
-    private func startPulse() {
-        if glowLayer.animation(forKey: "pulse") != nil {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard let image = spriteImage else {
             return
         }
 
-        let animation = CABasicAnimation(keyPath: "opacity")
-        animation.fromValue = 0.18
-        animation.toValue = 0.62
-        animation.duration = 0.9
-        animation.autoreverses = true
-        animation.repeatCount = .infinity
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        glowLayer.add(animation, forKey: "pulse")
+        NSGraphicsContext.current?.imageInterpolation = .none
+        let frame = currentFrame()
+        let source = NSRect(x: frame.column * 32, y: Int(image.size.height) - ((frame.row + 1) * 32), width: 32, height: 32)
+        let size: CGFloat = 50
+        let dest = NSRect(
+            x: (bounds.width - size) / 2 + sway,
+            y: (bounds.height - size) / 2 + bounce,
+            width: size,
+            height: size
+        )
+        image.draw(in: dest, from: source, operation: .sourceOver, fraction: opacity)
+
+        drawAccent()
     }
 
-    private func stopPulse() {
-        glowLayer.removeAnimation(forKey: "pulse")
-        glowLayer.opacity = 0.24
+    private func currentFrame() -> SpriteFrame {
+        let frames = frames(for: state)
+        let index = Int(phase) % frames.count
+        return frames[index]
+    }
+
+    private func frames(for state: TaskState) -> [SpriteFrame] {
+        switch state {
+        case .idle:
+            return [
+                SpriteFrame(column: 2, row: 0),
+                SpriteFrame(column: 2, row: 0),
+                SpriteFrame(column: 2, row: 1),
+                SpriteFrame(column: 2, row: 1)
+            ]
+        case .running:
+            return [
+                SpriteFrame(column: 3, row: 0),
+                SpriteFrame(column: 3, row: 1)
+            ]
+        case .done:
+            return [
+                SpriteFrame(column: 5, row: 0),
+                SpriteFrame(column: 6, row: 0),
+                SpriteFrame(column: 7, row: 0),
+                SpriteFrame(column: 6, row: 0)
+            ]
+        case .closed:
+            return [
+                SpriteFrame(column: 2, row: 0),
+                SpriteFrame(column: 2, row: 0),
+                SpriteFrame(column: 2, row: 1),
+                SpriteFrame(column: 2, row: 1)
+            ]
+        case .error:
+            return [
+                SpriteFrame(column: 7, row: 3),
+                SpriteFrame(column: 7, row: 3),
+                SpriteFrame(column: 7, row: 0)
+            ]
+        }
+    }
+
+    private var bounce: CGFloat {
+        switch state {
+        case .running:
+            return sin(phase * 2) * 2
+        case .done:
+            return abs(sin(phase * 1.6)) * 2
+        default:
+            return 0
+        }
+    }
+
+    private var sway: CGFloat {
+        state == .running ? sin(phase * 1.4) * 2 : 0
+    }
+
+    private var opacity: CGFloat {
+        state == .closed ? 0.82 : 1
+    }
+
+    private func drawAccent() {
+        switch state {
+        case .running:
+            drawText("run", fontSize: 9, at: NSPoint(x: 40, y: 7), color: .systemBlue)
+        case .done:
+            drawText("ok", fontSize: 9, at: NSPoint(x: 43, y: 40 + sin(phase) * 1.2), color: .systemGreen)
+        case .closed:
+            drawText("z", fontSize: 10, at: NSPoint(x: 45, y: 39 + sin(phase) * 1.2), color: .secondaryLabelColor)
+            drawText("z", fontSize: 8, at: NSPoint(x: 52, y: 45 + sin(phase + 0.7) * 1.2), color: .tertiaryLabelColor)
+        case .error:
+            drawText("!", fontSize: 13, at: NSPoint(x: 48, y: 40), color: .systemOrange)
+        case .idle:
+            break
+        }
+    }
+
+    private func drawText(_ value: String, fontSize: CGFloat, at point: NSPoint, color: NSColor) {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold),
+            .foregroundColor: color
+        ]
+        NSString(string: value).draw(at: point, withAttributes: attrs)
     }
 }
 

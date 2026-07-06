@@ -13,6 +13,9 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "CodexStatusBar",
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit")
             ]

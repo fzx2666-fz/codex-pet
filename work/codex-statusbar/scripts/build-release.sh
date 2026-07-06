@@ -16,6 +16,12 @@ cp ".build/release/CodexStatusBar" "$MACOS_DIR/CodexStatusBar"
 cp ".build/release/codex-status" "$OUTPUT_DIR/codex-status"
 chmod +x "$MACOS_DIR/CodexStatusBar" "$OUTPUT_DIR/codex-status"
 
+RESOURCE_BUNDLE="$(find .build -path '*/release/CodexStatusBar_CodexStatusBar.bundle' -type d | head -n 1)"
+if [[ -n "$RESOURCE_BUNDLE" ]]; then
+  rm -rf "$CONTENTS_DIR/Resources/CodexStatusBar_CodexStatusBar.bundle"
+  cp -R "$RESOURCE_BUNDLE" "$CONTENTS_DIR/Resources/CodexStatusBar_CodexStatusBar.bundle"
+fi
+
 HOOKS_DIR="$ROOT_DIR/scripts/codex-hooks"
 if [[ -d "$HOOKS_DIR" ]]; then
   cp "$HOOKS_DIR/codex-status-writer.js" "$CONTENTS_DIR/Resources/codex-status-writer.js"

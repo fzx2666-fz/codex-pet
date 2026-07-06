@@ -13,4 +13,4 @@ if (!fs.existsSync(hooksPath)) {
 
 const settings = removeOwnHooks(readHooks(hooksPath));
 writeHooks(hooksPath, settings);
-console.log(`Removed Codex Status Bar hooks from ${hooksPath}`);
+console.log(`Removed Codex Pet hooks from ${hooksPath}`);

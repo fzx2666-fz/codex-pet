@@ -30,14 +30,14 @@ function main() {
   const settings = readHooks(hooksPath);
 
   fs.mkdirSync(path.dirname(hooksPath), { recursive: true });
-  const backupPath = `${hooksPath}.bak-codex-status-bar`;
+  const backupPath = `${hooksPath}.bak-codex-pet`;
   if (fs.existsSync(hooksPath) && !fs.existsSync(backupPath)) {
     fs.copyFileSync(hooksPath, backupPath);
   }
 
   const repaired = repairHooks(settings, { nodePath, writerPath, lifecyclePath, appPath });
   writeHooks(hooksPath, repaired);
-  console.log(`Installed Codex Status Bar hooks into ${hooksPath}`);
+  console.log(`Installed Codex Pet hooks into ${hooksPath}`);
   console.log(`Node: ${nodePath}`);
   if (appPath) console.log(`App: ${appPath}`);
   console.log(`Backup: ${backupPath}`);

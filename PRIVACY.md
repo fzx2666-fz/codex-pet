@@ -1,6 +1,6 @@
 # Privacy
 
-Codex Status Bar is designed to run locally on your Mac.
+Codex Pet is designed to run locally on your Mac.
 
 ## Network
 
@@ -19,7 +19,7 @@ The hook installer reads and writes:
 
 It creates a one-time backup when possible:
 
-- `~/.codex/hooks.json.bak-codex-status-bar`
+- `~/.codex/hooks.json.bak-codex-pet`
 
 ## Local Data Written
 
@@ -41,5 +41,5 @@ idle, running, or recently done.
 After building the app, uninstall hooks with:
 
 ```sh
-node outputs/CodexStatusBar.app/Contents/Resources/uninstall-codex-statusbar.js
+node outputs/CodexPet.app/Contents/Resources/uninstall-codex-statusbar.js
 ```

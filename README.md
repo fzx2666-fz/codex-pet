@@ -1,6 +1,6 @@
-# Codex Status Bar
+# Codex Pet
 
-A tiny macOS status app for watching Codex Desktop activity at a glance.
+A tiny macOS status pet for watching Codex Desktop activity at a glance.
 
 It shows a draggable pixel-cat capsule with the current state:
 
@@ -29,14 +29,14 @@ cd work/codex-statusbar
 Build outputs are written to:
 
 ```text
-outputs/CodexStatusBar.app
+outputs/CodexPet.app
 outputs/codex-status
 ```
 
 ## Run
 
 ```sh
-open outputs/CodexStatusBar.app
+open outputs/CodexPet.app
 ```
 
 The floating capsule can be dragged. Its position is saved locally with
@@ -53,13 +53,13 @@ The app works best when Codex hook events write status files into:
 After building, install or repair hooks with:
 
 ```sh
-node outputs/CodexStatusBar.app/Contents/Resources/install-codex-statusbar.js --app-path outputs/CodexStatusBar.app
+node outputs/CodexPet.app/Contents/Resources/install-codex-statusbar.js --app-path outputs/CodexPet.app
 ```
 
 The installer updates `~/.codex/hooks.json` and creates a backup at:
 
 ```text
-~/.codex/hooks.json.bak-codex-status-bar
+~/.codex/hooks.json.bak-codex-pet
 ```
 
 If hook files are unavailable, the app falls back to Codex runtime logs at:
@@ -80,7 +80,7 @@ CODEX_LOG_DB=/path/to/logs_2.sqlite
 
 ## Privacy
 
-Codex Status Bar is local-only. It does not send telemetry or network requests.
+Codex Pet is local-only. It does not send telemetry or network requests.
 
 The app reads local Codex state files and, as a fallback, local Codex runtime
 logs. See `PRIVACY.md` for details.

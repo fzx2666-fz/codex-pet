@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "CodexStatusBar",
+    name: "CodexPet",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "CodexStatusBar", targets: ["CodexStatusBar"]),
+        .executable(name: "CodexPet", targets: ["CodexStatusBar"]),
         .executable(name: "codex-status", targets: ["codex-status"])
     ],
     targets: [

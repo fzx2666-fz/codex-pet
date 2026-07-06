@@ -1,6 +1,6 @@
-# Codex Status Bar
+# Codex Pet
 
-A tiny macOS status app that shows the current Codex Desktop runtime state in a
+A tiny macOS status pet that shows the current Codex Desktop runtime state in a
 draggable pixel-cat capsule.
 
 It prefers hook state records written by Codex hook events:
@@ -34,15 +34,15 @@ The display is driven by real Codex hook events or Codex core log events:
 
 Outputs:
 
-- `outputs/CodexStatusBar.app`
+- `outputs/CodexPet.app`
 
 ## Use
 
-1. Open `CodexStatusBar.app`.
+1. Open `CodexPet.app`.
 2. Install hooks with the bundled installer:
 
 ```sh
-node CodexStatusBar.app/Contents/Resources/install-codex-statusbar.js --app-path CodexStatusBar.app
+node CodexPet.app/Contents/Resources/install-codex-statusbar.js --app-path CodexPet.app
 ```
 
 3. Approve hooks in Codex if prompted, then start a new Codex prompt.

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_DIR="$(cd "$ROOT_DIR/../.." && pwd)"
 OUTPUT_DIR="$REPO_DIR/outputs"
-APP_DIR="$OUTPUT_DIR/CodexStatusBar.app"
+APP_DIR="$OUTPUT_DIR/CodexPet.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 
@@ -12,9 +12,9 @@ cd "$ROOT_DIR"
 swift build -c release
 
 mkdir -p "$MACOS_DIR" "$CONTENTS_DIR/Resources"
-cp ".build/release/CodexStatusBar" "$MACOS_DIR/CodexStatusBar"
+cp ".build/release/CodexPet" "$MACOS_DIR/CodexPet"
 cp ".build/release/codex-status" "$OUTPUT_DIR/codex-status"
-chmod +x "$MACOS_DIR/CodexStatusBar" "$OUTPUT_DIR/codex-status"
+chmod +x "$MACOS_DIR/CodexPet" "$OUTPUT_DIR/codex-status"
 
 RESOURCE_BUNDLE="$(find .build -path '*/release/CodexStatusBar_CodexStatusBar.bundle' -type d | head -n 1)"
 if [[ -n "$RESOURCE_BUNDLE" ]]; then
@@ -44,13 +44,13 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleExecutable</key>
-    <string>CodexStatusBar</string>
+    <string>CodexPet</string>
     <key>CFBundleIdentifier</key>
-    <string>local.codex.statusbar</string>
+    <string>local.codex.pet</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Codex Status Bar</string>
+    <string>Codex Pet</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

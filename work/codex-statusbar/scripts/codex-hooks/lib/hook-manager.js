@@ -150,7 +150,7 @@ function desiredHookSettings({ existing, nodePath, writerPath, lifecyclePath, ap
       type: "command",
       command: hookCommand(nodePath, commandPath, spec.event, appPath),
       timeout: 5,
-      statusMessage: `Codex Status Bar: ${spec.event}`,
+      statusMessage: `Codex Pet: ${spec.event}`,
     };
     const group = spec.matcher ? { matcher: spec.matcher, hooks: [hook] } : { hooks: [hook] };
     settings.hooks[spec.event] = stripOwnHooksFromEntries(settings.hooks[spec.event]);
@@ -211,7 +211,7 @@ function inferAppPath(options = {}) {
   if (path.basename(resourceDir) === "Resources" && path.basename(contentsDir) === "Contents") {
     return path.dirname(contentsDir);
   }
-  return path.resolve(resourceDir, "..", "build", "CodexStatusBar.app");
+  return path.resolve(resourceDir, "..", "build", "CodexPet.app");
 }
 
 function traceLaunch(event) {
@@ -251,7 +251,7 @@ function runningProcessCommands(processName, timeoutMs) {
 }
 
 function statusBarProcessRunning(options = {}) {
-  const processName = options.processName || process.env.CODEX_STATUSBAR_PROCESS_NAME || "CodexStatusBar";
+  const processName = options.processName || process.env.CODEX_STATUSBAR_PROCESS_NAME || "CodexPet";
   const timeoutMs = Number(options.timeoutMs || 1000);
 
   if (typeof options.runningProcessCommands === "function") {

@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Codex Status Bar.
+Thanks for helping improve Codex Pet.
 
 ## Development
 
@@ -14,7 +14,7 @@ cd work/codex-statusbar
 Run the built app:
 
 ```sh
-open outputs/CodexStatusBar.app
+open outputs/CodexPet.app
 ```
 
 ## Guidelines

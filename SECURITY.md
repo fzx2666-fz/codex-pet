@@ -18,6 +18,6 @@ Relevant issues include:
 
 ## Local-Only Design
 
-Codex Status Bar is intended to run locally and does not require a server. Avoid
+Codex Pet is intended to run locally and does not require a server. Avoid
 adding telemetry, remote logging, or automatic update behavior without explicit
 user consent and documentation.

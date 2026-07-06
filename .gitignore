@@ -6,6 +6,7 @@ work/codex-statusbar/.build/
 
 # Local deliverables and generated app bundles
 outputs/CodexStatusBar.app/
+outputs/CodexPet.app/
 outputs/codex-status
 outputs/.DS_Store
 

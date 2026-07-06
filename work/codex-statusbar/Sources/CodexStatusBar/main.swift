@@ -25,6 +25,8 @@ struct CodexTaskStatus: Codable {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let floatingWindowOriginKey = "floatingWindowOrigin"
+    private static let activeHookRecordTTL: TimeInterval = 90
+    private static let doneRecordTTL: TimeInterval = 12
 
     private var statusItem: NSStatusItem!
     private var floatingWindow: NSWindow?
@@ -63,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        let records = loadSessionRecords()
+        let records = loadSessionRecords().filter(isUsableHookRecord)
         guard let lead = records.max(by: { left, right in
             let leftPriority = priority(for: left.state)
             let rightPriority = priority(for: right.state)
@@ -123,6 +125,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
     }
 
+    private func isUsableHookRecord(_ record: HookSessionRecord) -> Bool {
+        let now = Date().timeIntervalSince1970
+
+        if record.state == "done" {
+            return now - record.ts <= Self.doneRecordTTL
+        }
+
+        guard isActiveState(record.state) else {
+            return true
+        }
+
+        if let visibleUntilMs = record.visibleUntilMs, visibleUntilMs > 0 {
+            return now * 1000 <= visibleUntilMs
+        }
+
+        return now - record.ts <= Self.activeHookRecordTTL
+    }
+
     private func priority(for state: String) -> Int {
         if state == "permission" {
             return 3
@@ -163,7 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        if max(latestDone, latestInterrupt) > 0 && Date().timeIntervalSince(latestDate) < 300 {
+        if max(latestDone, latestInterrupt) > 0 && Date().timeIntervalSince(latestDate) < Self.doneRecordTTL {
             return CodexTaskStatus(
                 state: .done,
                 task: "Codex done",
@@ -478,11 +498,13 @@ struct HookSessionRecord: Decodable {
     let state: String
     let label: String
     let ts: Double
+    let visibleUntilMs: Double?
 
     enum CodingKeys: String, CodingKey {
         case state
         case label
         case ts
+        case visibleUntilMs
     }
 
     init(from decoder: Decoder) throws {
@@ -490,6 +512,7 @@ struct HookSessionRecord: Decodable {
         state = try container.decodeIfPresent(String.self, forKey: .state) ?? "idle"
         label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
         ts = try container.decodeIfPresent(Double.self, forKey: .ts) ?? 0
+        visibleUntilMs = try container.decodeIfPresent(Double.self, forKey: .visibleUntilMs)
     }
 }
 

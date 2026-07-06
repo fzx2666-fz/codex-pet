@@ -587,8 +587,6 @@ final class CatStatusView: NSView {
             height: size
         )
         image.draw(in: dest, from: source, operation: .sourceOver, fraction: opacity)
-
-        drawAccent()
     }
 
     private func currentFrame() -> SpriteFrame {
@@ -653,29 +651,6 @@ final class CatStatusView: NSView {
         state == .closed ? 0.82 : 1
     }
 
-    private func drawAccent() {
-        switch state {
-        case .running:
-            drawText("run", fontSize: 9, at: NSPoint(x: 40, y: 7), color: .systemBlue)
-        case .done:
-            drawText("ok", fontSize: 9, at: NSPoint(x: 43, y: 40 + sin(phase) * 1.2), color: .systemGreen)
-        case .closed:
-            drawText("z", fontSize: 10, at: NSPoint(x: 45, y: 39 + sin(phase) * 1.2), color: .secondaryLabelColor)
-            drawText("z", fontSize: 8, at: NSPoint(x: 52, y: 45 + sin(phase + 0.7) * 1.2), color: .tertiaryLabelColor)
-        case .error:
-            drawText("!", fontSize: 13, at: NSPoint(x: 48, y: 40), color: .systemOrange)
-        case .idle:
-            break
-        }
-    }
-
-    private func drawText(_ value: String, fontSize: CGFloat, at point: NSPoint, color: NSColor) {
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: fontSize, weight: .bold),
-            .foregroundColor: color
-        ]
-        NSString(string: value).draw(at: point, withAttributes: attrs)
-    }
 }
 
 private func resolveStatusBarStateDirURL() -> URL {

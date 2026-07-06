@@ -5,6 +5,7 @@ enum TaskState: String, Codable {
     case idle
     case running
     case done
+    case closed
     case error
 }
 
@@ -23,6 +24,8 @@ struct CodexTaskStatus: Codable {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let floatingWindowOriginKey = "floatingWindowOrigin"
+
     private var statusItem: NSStatusItem!
     private var floatingWindow: NSWindow?
     private var floatingTitleLabel: NSTextField?
@@ -51,6 +54,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func loadRuntimeStatus() -> CodexTaskStatus {
+        guard isCodexDesktopRunning() else {
+            return CodexTaskStatus(
+                state: .closed,
+                task: "Codex closed",
+                detail: "Codex Desktop is not running.",
+                updatedAt: Date()
+            )
+        }
+
         let records = loadSessionRecords()
         guard let lead = records.max(by: { left, right in
             let leftPriority = priority(for: left.state)
@@ -84,6 +96,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             detail: lead.label,
             updatedAt: Date(timeIntervalSince1970: lead.ts)
         )
+    }
+
+    private func isCodexDesktopRunning() -> Bool {
+        NSWorkspace.shared.runningApplications.contains { application in
+            application.bundleIdentifier == "com.openai.codex"
+        }
     }
 
     private func loadSessionRecords() -> [HookSessionRecord] {
@@ -131,10 +149,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let latestRun = eventTimes.latestRun
         let latestDone = eventTimes.latestDone
-        let latest = max(latestRun, latestDone)
+        let latestNeedsFollowUp = eventTimes.latestNeedsFollowUp
+        let latestInterrupt = eventTimes.latestInterrupt
+        let latest = max(latestRun, latestDone, latestNeedsFollowUp, latestInterrupt)
         let latestDate = latest > 0 ? Date(timeIntervalSince1970: TimeInterval(latest)) : Date()
 
-        if latestRun > latestDone {
+        if latestRun > max(latestDone, latestInterrupt) || latestNeedsFollowUp > max(latestDone, latestInterrupt) {
             return CodexTaskStatus(
                 state: .running,
                 task: "Codex running",
@@ -143,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         }
 
-        if latestDone > 0 && Date().timeIntervalSince(latestDate) < 300 {
+        if max(latestDone, latestInterrupt) > 0 && Date().timeIntervalSince(latestDate) < 300 {
             return CodexTaskStatus(
                 state: .done,
                 task: "Codex done",
@@ -160,15 +180,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func queryCoreLogEventTimes() -> (latestRun: Int, latestDone: Int)? {
+    private func queryCoreLogEventTimes() -> (latestRun: Int, latestDone: Int, latestNeedsFollowUp: Int, latestInterrupt: Int)? {
         guard FileManager.default.fileExists(atPath: logDBURL.path) else {
             return nil
         }
 
         let query = """
         select
-          coalesce((select max(ts) from logs where target = 'codex_core::stream_events_utils' and feedback_log_body like '%model=gpt-%' and feedback_log_body not like '%codex-auto-review%'), 0),
-          coalesce((select max(ts) from logs where target = 'log' and feedback_log_body like 'Received message {"type":"response.completed"%' and feedback_log_body not like '%You are judging one planned coding-agent action%'), 0);
+          max(
+            coalesce((select max(ts) from logs where target = 'codex_core::stream_events_utils' and feedback_log_body like '%model=gpt-%' and feedback_log_body not like '%codex-auto-review%'), 0),
+            coalesce((select max(ts) from logs where target = 'codex_core::session::handlers' and feedback_log_body like '%op: UserInput%' and feedback_log_body not like '%The following is the Codex agent history%'), 0)
+          ),
+          coalesce((select max(ts) from logs where target = 'codex_core::session::turn' and feedback_log_body like '%model=gpt-%' and feedback_log_body not like '%codex-auto-review%' and feedback_log_body like '%post sampling token usage%' and feedback_log_body like '%needs_follow_up=false%'), 0),
+          coalesce((select max(ts) from logs where target = 'codex_core::session::turn' and feedback_log_body like '%model=gpt-%' and feedback_log_body not like '%codex-auto-review%' and feedback_log_body like '%post sampling token usage%' and feedback_log_body like '%needs_follow_up=true%'), 0),
+          coalesce((select max(ts) from logs where target = 'codex_core::session' and feedback_log_body like '%op.dispatch.interrupt%' and feedback_log_body like '%interrupt received%'), 0);
         """
 
         let process = Process()
@@ -196,11 +221,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let parts = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "|")
-        guard parts.count == 2, let latestRun = Int(parts[0]), let latestDone = Int(parts[1]) else {
+        guard
+            parts.count == 4,
+            let latestRun = Int(parts[0]),
+            let latestDone = Int(parts[1]),
+            let latestNeedsFollowUp = Int(parts[2]),
+            let latestInterrupt = Int(parts[3])
+        else {
             return nil
         }
 
-        return (latestRun, latestDone)
+        return (latestRun, latestDone, latestNeedsFollowUp, latestInterrupt)
     }
 
     private func render() {
@@ -218,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "C*"
         case .done:
             return "C+"
+        case .closed:
+            return "Cx"
         case .error:
             return "C!"
         }
@@ -270,6 +303,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isOpaque = false
         window.hasShadow = false
         window.ignoresMouseEvents = false
+        window.isMovableByWindowBackground = true
+        window.delegate = self
 
         let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 212, height: 48)
         let material = NSVisualEffectView(frame: bounds)
@@ -330,8 +365,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return "running"
         case .done:
             return "done"
+        case .closed:
+            return "closed"
         case .error:
-            return "done"
+            return "error"
         }
     }
 
@@ -343,6 +380,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return NSColor.systemBlue
         case .done:
             return NSColor.systemGreen
+        case .closed:
+            return NSColor.systemRed
         case .error:
             return NSColor.systemOrange
         }
@@ -356,6 +395,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return .labelColor
         case .done:
             return .secondaryLabelColor
+        case .closed:
+            return .labelColor
         case .error:
             return .labelColor
         }
@@ -367,8 +408,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let frame = screen.visibleFrame
         let size = window.frame.size
-        let origin = NSPoint(x: frame.maxX - size.width - 12, y: frame.maxY - size.height - 8)
+        let fallback = NSPoint(x: frame.maxX - size.width - 12, y: frame.maxY - size.height - 8)
+        let saved = UserDefaults.standard.string(forKey: Self.floatingWindowOriginKey).flatMap(NSPointFromString)
+        let origin = clamp(saved ?? fallback, size: size, in: frame)
         window.setFrameOrigin(origin)
+    }
+
+    private func clamp(_ origin: NSPoint, size: NSSize, in frame: NSRect) -> NSPoint {
+        NSPoint(
+            x: min(max(origin.x, frame.minX), frame.maxX - size.width),
+            y: min(max(origin.y, frame.minY), frame.maxY - size.height)
+        )
+    }
+
+    private func saveFloatingWindowOrigin() {
+        guard let window = floatingWindow else {
+            return
+        }
+        UserDefaults.standard.set(NSStringFromPoint(window.frame.origin), forKey: Self.floatingWindowOriginKey)
     }
 
     private func relativeTime(from date: Date) -> String {
@@ -409,6 +466,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowDidMove(_ notification: Notification) {
+        saveFloatingWindowOrigin()
+    }
 }
 
 struct HookSessionRecord: Decodable {

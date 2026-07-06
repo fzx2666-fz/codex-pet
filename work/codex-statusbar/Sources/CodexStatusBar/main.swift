@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import QuartzCore
 
 enum TaskState: String, Codable {
     case idle
@@ -33,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var floatingTitleLabel: NSTextField?
     private var floatingStatusLabel: NSTextField?
     private var floatingCatView: CatStatusView?
+    private var floatingHairlineView: NSView?
+    private var floatingHighlightView: NSView?
+    private var isFloatingHovered = false
     private var timer: Timer?
     private var currentStatus = CodexTaskStatus.empty
     private let stateDirURL = resolveStatusBarStateDirURL()
@@ -323,11 +327,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isOpaque = false
         window.hasShadow = false
         window.ignoresMouseEvents = false
-        window.isMovableByWindowBackground = true
+        window.isMovableByWindowBackground = false
         window.delegate = self
 
         let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 126, height: 62)
-        let material = NSVisualEffectView(frame: bounds)
+        let material = HoverStatusView(frame: bounds)
+        material.onHoverChanged = { [weak self] isHovered in
+            self?.setFloatingHover(isHovered)
+        }
+        material.onClick = { [weak self] in
+            self?.activateCodexDesktop()
+        }
         material.material = .hudWindow
         material.blendingMode = .behindWindow
         material.state = .active
@@ -338,9 +348,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let hairline = NSView(frame: bounds)
         hairline.wantsLayer = true
         hairline.layer?.cornerRadius = 20
-        hairline.layer?.borderWidth = 0.5
-        hairline.layer?.borderColor = NSColor.black.withAlphaComponent(0.10).cgColor
-        hairline.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.06).cgColor
+        hairline.layer?.borderWidth = 1
+        hairline.layer?.borderColor = floatingBorderColor(isHovered: false).cgColor
+        hairline.layer?.backgroundColor = floatingBackgroundColor(isHovered: false).cgColor
+
+        let highlight = NSView(frame: bounds.insetBy(dx: 1.5, dy: 1.5))
+        highlight.wantsLayer = true
+        highlight.layer?.cornerRadius = 18.5
+        highlight.layer?.borderWidth = 1
+        highlight.layer?.borderColor = floatingHighlightColor(isHovered: false).cgColor
+        highlight.layer?.backgroundColor = NSColor.clear.cgColor
 
         let cat = CatStatusView(frame: NSRect(x: 8, y: 6, width: 58, height: 50))
 
@@ -357,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.textColor = .secondaryLabelColor
 
         material.addSubview(hairline)
+        material.addSubview(highlight)
         material.addSubview(cat)
         material.addSubview(title)
         material.addSubview(status)
@@ -366,6 +384,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         floatingTitleLabel = title
         floatingStatusLabel = status
         floatingCatView = cat
+        floatingHairlineView = hairline
+        floatingHighlightView = highlight
         positionFloatingWindow()
         window.orderFrontRegardless()
     }
@@ -374,10 +394,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         floatingTitleLabel?.stringValue = "Codex"
         floatingStatusLabel?.stringValue = floatingStatusWord(for: status)
         floatingStatusLabel?.font = floatingStatusFont(for: status)
-        floatingStatusLabel?.textColor = floatingStatusTextColor(for: status)
+        floatingStatusLabel?.textColor = isFloatingHovered ? .labelColor : floatingStatusTextColor(for: status)
         floatingCatView?.setState(status.state)
         positionFloatingWindow()
         floatingWindow?.orderFrontRegardless()
+    }
+
+    private func setFloatingHover(_ isHovered: Bool) {
+        guard isFloatingHovered != isHovered else {
+            return
+        }
+
+        isFloatingHovered = isHovered
+        floatingCatView?.setHovered(isHovered)
+        floatingStatusLabel?.textColor = isHovered ? .labelColor : floatingStatusTextColor(for: currentStatus)
+
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.16)
+        floatingHairlineView?.layer?.borderColor = floatingBorderColor(isHovered: isHovered).cgColor
+        floatingHairlineView?.layer?.backgroundColor = floatingBackgroundColor(isHovered: isHovered).cgColor
+        floatingHighlightView?.layer?.borderColor = floatingHighlightColor(isHovered: isHovered).cgColor
+        CATransaction.commit()
+    }
+
+    private func floatingBackgroundColor(isHovered: Bool) -> NSColor {
+        if isHovered {
+            return NSColor(calibratedRed: 1.00, green: 0.90, blue: 0.58, alpha: 0.98)
+        }
+        return NSColor(calibratedRed: 1.00, green: 0.94, blue: 0.70, alpha: 0.97)
+    }
+
+    private func floatingBorderColor(isHovered: Bool) -> NSColor {
+        NSColor(calibratedRed: 0.74, green: 0.52, blue: 0.18, alpha: isHovered ? 0.50 : 0.34)
+    }
+
+    private func floatingHighlightColor(isHovered: Bool) -> NSColor {
+        NSColor.white.withAlphaComponent(isHovered ? 0.58 : 0.44)
     }
 
     private func floatingStatusWord(for status: CodexTaskStatus) -> String {
@@ -490,6 +542,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([stateDirURL])
     }
 
+    @objc private func activateCodexDesktop() {
+        if let application = NSWorkspace.shared.runningApplications.first(where: { application in
+            application.bundleIdentifier == "com.openai.codex"
+        }) {
+            application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            return
+        }
+
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex") else {
+            return
+        }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+
     @objc private func quit() {
         NSApplication.shared.terminate(nil)
     }
@@ -524,6 +593,78 @@ struct HookSessionRecord: Decodable {
     }
 }
 
+final class HoverStatusView: NSVisualEffectView {
+    var onHoverChanged: ((Bool) -> Void)?
+    var onClick: (() -> Void)?
+    private var trackingAreaRef: NSTrackingArea?
+    private var mouseDownScreenPoint: NSPoint?
+    private var mouseDownWindowOrigin: NSPoint?
+    private var didDrag = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        super.hitTest(point) == nil ? nil : self
+    }
+
+    override func updateTrackingAreas() {
+        if let trackingAreaRef {
+            removeTrackingArea(trackingAreaRef)
+        }
+
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingAreaRef = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged?(false)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownScreenPoint = NSEvent.mouseLocation
+        mouseDownWindowOrigin = window?.frame.origin
+        didDrag = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let window, let mouseDownScreenPoint, let mouseDownWindowOrigin else {
+            return
+        }
+
+        let current = NSEvent.mouseLocation
+        let dx = current.x - mouseDownScreenPoint.x
+        let dy = current.y - mouseDownScreenPoint.y
+        didDrag = didDrag || hypot(dx, dy) > 3
+        window.setFrameOrigin(NSPoint(x: mouseDownWindowOrigin.x + dx, y: mouseDownWindowOrigin.y + dy))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer {
+            mouseDownScreenPoint = nil
+            mouseDownWindowOrigin = nil
+            didDrag = false
+        }
+
+        guard let start = mouseDownScreenPoint else {
+            return
+        }
+
+        let current = NSEvent.mouseLocation
+        if !didDrag && hypot(current.x - start.x, current.y - start.y) <= 3 {
+            onClick?()
+        }
+    }
+}
+
 final class CatStatusView: NSView {
     private struct SpriteFrame {
         let column: Int
@@ -531,6 +672,7 @@ final class CatStatusView: NSView {
     }
 
     private var state: TaskState = .idle
+    private var isHovered = false
     private var phase: CGFloat = 0
     private var animationTimer: Timer?
     private let spriteImage = NSImage(named: "oneko") ?? NSImage(contentsOf: Bundle.module.url(forResource: "oneko", withExtension: "gif") ?? URL(fileURLWithPath: ""))
@@ -557,6 +699,14 @@ final class CatStatusView: NSView {
         needsDisplay = true
     }
 
+    func setHovered(_ isHovered: Bool) {
+        guard self.isHovered != isHovered else {
+            return
+        }
+        self.isHovered = isHovered
+        needsDisplay = true
+    }
+
     private func startAnimation() {
         wantsLayer = true
         layer?.masksToBounds = false
@@ -571,6 +721,8 @@ final class CatStatusView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        NSColor.clear.setFill()
+        bounds.fill(using: .copy)
 
         guard let image = spriteImage else {
             return
@@ -579,7 +731,7 @@ final class CatStatusView: NSView {
         NSGraphicsContext.current?.imageInterpolation = .none
         let frame = currentFrame()
         let source = NSRect(x: frame.column * 32, y: Int(image.size.height) - ((frame.row + 1) * 32), width: 32, height: 32)
-        let size: CGFloat = 50
+        let size: CGFloat = isHovered ? 53 : 50
         let dest = NSRect(
             x: (bounds.width - size) / 2 + sway,
             y: (bounds.height - size) / 2 + bounce,
@@ -648,7 +800,10 @@ final class CatStatusView: NSView {
     }
 
     private var opacity: CGFloat {
-        state == .closed ? 0.82 : 1
+        if state == .closed {
+            return isHovered ? 0.9 : 0.82
+        }
+        return 1
     }
 
 }

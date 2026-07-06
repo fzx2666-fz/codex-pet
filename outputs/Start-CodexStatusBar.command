@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP="/Users/bytedance/Documents/Codex/2026-07-05/mac-codex/outputs/CodexStatusBar.app"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP="$SCRIPT_DIR/CodexStatusBar.app"
 
 open "$APP"
 

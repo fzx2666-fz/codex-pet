@@ -1,0 +1,13 @@
+# Notices
+
+Codex Status Bar is released under the MIT License. See `LICENSE`.
+
+This repository also includes third-party MIT-licensed code and assets:
+
+- Hook writer scripts adapted from `PG408/codex-status-bar`.
+  See `work/codex-statusbar/third_party/PG408-codex-status-bar/`.
+- The pixel cat sprite `oneko.gif` from `adryd325/oneko.js`.
+  See `work/codex-statusbar/third_party/oneko.js/`.
+
+Third-party copyright and license texts are preserved in the corresponding
+`third_party` directories.

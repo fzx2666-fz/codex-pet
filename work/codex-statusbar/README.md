@@ -1,6 +1,7 @@
 # Codex Status Bar
 
-A tiny macOS menu bar app that shows the current Codex runtime state.
+A tiny macOS status app that shows the current Codex Desktop runtime state in a
+draggable pixel-cat capsule.
 
 It prefers hook state records written by Codex hook events:
 
@@ -21,8 +22,9 @@ Set `CODEX_LOG_DB` before launching the app if Codex stores logs elsewhere.
 The display is driven by real Codex hook events or Codex core log events:
 
 - `Codex running`: a session is thinking, using a tool, compacting, waiting, or requesting permission.
-- `Codex done`: the latest selected session is complete.
-- `Codex idle`: there are no active hook state records.
+- `Codex done`: the latest selected session just completed.
+- `Codex idle`: Codex is open and there are no active hook state records.
+- `Codex closed`: Codex Desktop is not running.
 
 ## Build
 
@@ -52,3 +54,7 @@ The app runs as an accessory app, so it stays in the menu bar and does not occup
 The bundled hook writer scripts are vendored from
 [PG408/codex-status-bar](https://github.com/PG408/codex-status-bar). Its MIT
 license and notices are preserved under `third_party/PG408-codex-status-bar/`.
+
+The bundled pixel cat sprite is `oneko.gif` from
+[adryd325/oneko.js](https://github.com/adryd325/oneko.js). Its MIT license is
+preserved under `third_party/oneko.js/`.

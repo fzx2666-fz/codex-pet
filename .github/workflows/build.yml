@@ -1,0 +1,16 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Build release app
+        working-directory: work/codex-statusbar
+        run: ./scripts/build-release.sh

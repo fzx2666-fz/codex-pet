@@ -315,7 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func makeFloatingStatusWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 126, height: 62),
+            contentRect: NSRect(x: 0, y: 0, width: 166, height: 62),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -330,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = false
         window.delegate = self
 
-        let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 126, height: 62)
+        let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 166, height: 62)
         let material = HoverStatusView(frame: bounds)
         material.onHoverChanged = { [weak self] isHovered in
             self?.setFloatingHover(isHovered)
@@ -368,8 +368,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         title.isHidden = true
 
         let status = NSTextField(labelWithString: "idle")
-        status.frame = NSRect(x: 67, y: 22, width: 50, height: 17)
-        status.alignment = .center
+        status.frame = NSRect(x: 68, y: 22, width: 88, height: 17)
+        status.alignment = .left
         status.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
         status.textColor = .secondaryLabelColor
 
@@ -419,13 +419,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func floatingBackgroundColor(isHovered: Bool) -> NSColor {
         if isHovered {
-            return NSColor(calibratedRed: 1.00, green: 0.90, blue: 0.58, alpha: 0.98)
+            return NSColor(calibratedRed: 0.72, green: 0.88, blue: 1.00, alpha: 0.98)
         }
-        return NSColor(calibratedRed: 1.00, green: 0.94, blue: 0.70, alpha: 0.97)
+        return NSColor(calibratedRed: 0.83, green: 0.94, blue: 1.00, alpha: 0.97)
     }
 
     private func floatingBorderColor(isHovered: Bool) -> NSColor {
-        NSColor(calibratedRed: 0.74, green: 0.52, blue: 0.18, alpha: isHovered ? 0.50 : 0.34)
+        NSColor(calibratedRed: 0.32, green: 0.58, blue: 0.78, alpha: isHovered ? 0.50 : 0.34)
     }
 
     private func floatingHighlightColor(isHovered: Bool) -> NSColor {
@@ -435,15 +435,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func floatingStatusWord(for status: CodexTaskStatus) -> String {
         switch status.state {
         case .idle:
-            return "idle"
+            return "Codex idle"
         case .running:
-            return "running"
+            return "Codex running"
         case .done:
-            return "done"
+            return "Codex done"
         case .closed:
-            return "closed"
+            return "Codex closed"
         case .error:
-            return "error"
+            return "Codex error"
         }
     }
 

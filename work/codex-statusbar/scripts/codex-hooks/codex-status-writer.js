@@ -260,12 +260,15 @@ function stateFor(payload, prev, facts, now) {
   const pid = Number(prev.pid || process.ppid || 0);
   const surface = resolveSessionSurface(payload, prev, process.env, { pid, sessionId });
   const visible = deriveVisibleState(facts);
+  const threadName = latestThreadName(sessionId);
   return {
     state: visible.state,
     label: visible.label,
     tool: visible.tool,
     activity: visible.activity,
-    threadName: latestThreadName(sessionId),
+    taskId: sessionId,
+    taskTitle: threadName,
+    threadName,
     project: basename(payload.cwd || payload.working_directory || payload.current_working_directory) || prev.project || "",
     sessionId,
     turnId: visible.turnId || facts.main.turnId || (prev.statusFacts ? "" : prev.turnId || ""),

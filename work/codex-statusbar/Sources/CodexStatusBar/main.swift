@@ -10,11 +10,68 @@ enum TaskState: String, Codable {
     case error
 }
 
+final class FocusTarget: Codable {
+    var kind: String = ""
+    var url: String = ""
+    var bundleId: String = ""
+    var appName: String = ""
+    var fallback: FocusTarget?
+
+    static let none = FocusTarget(kind: "none")
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case url
+        case bundleId
+        case appName
+        case fallback
+    }
+
+    init(kind: String = "", url: String = "", bundleId: String = "", appName: String = "", fallback: FocusTarget? = nil) {
+        self.kind = kind
+        self.url = url
+        self.bundleId = bundleId
+        self.appName = appName
+        self.fallback = fallback
+    }
+
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? "none"
+        url = try container.decodeIfPresent(String.self, forKey: .url) ?? ""
+        bundleId = try container.decodeIfPresent(String.self, forKey: .bundleId) ?? ""
+        appName = try container.decodeIfPresent(String.self, forKey: .appName) ?? ""
+        fallback = try container.decodeIfPresent(FocusTarget.self, forKey: .fallback)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(url, forKey: .url)
+        try container.encode(bundleId, forKey: .bundleId)
+        try container.encode(appName, forKey: .appName)
+        try container.encodeIfPresent(fallback, forKey: .fallback)
+    }
+}
+
 struct CodexTaskStatus: Codable {
     var state: TaskState
     var task: String
     var detail: String
     var updatedAt: Date
+    var sessionId: String = ""
+    var title: String = ""
+    var project: String = ""
+    var focusTarget: FocusTarget = .none
+
+    func withSessionMetadata(from record: HookSessionRecord, title: String) -> CodexTaskStatus {
+        var copy = self
+        copy.sessionId = record.taskId.isEmpty ? record.sessionId : record.taskId
+        copy.title = title
+        copy.project = record.project
+        copy.focusTarget = record.focusTarget
+        return copy
+    }
 
     static let empty = CodexTaskStatus(
         state: .idle,
@@ -28,17 +85,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let floatingWindowOriginKey = "floatingWindowOrigin"
     private static let activeHookRecordTTL: TimeInterval = 90
     private static let doneRecordTTL: TimeInterval = 12
+    private static let idleRecordTTL: TimeInterval = 86_400
 
     private var statusItem: NSStatusItem!
     private var floatingWindow: NSWindow?
     private var floatingTitleLabel: NSTextField?
     private var floatingStatusLabel: NSTextField?
+    private var floatingTaskLabels: [NSTextField] = []
+    private var floatingListToggleButton: NSButton?
     private var floatingCatView: CatStatusView?
     private var floatingHairlineView: NSView?
     private var floatingHighlightView: NSView?
     private var isFloatingHovered = false
+    private var isFloatingTaskListExpanded = true
     private var timer: Timer?
     private var currentStatus = CodexTaskStatus.empty
+    private var currentTasks = [CodexTaskStatus.empty]
     private let stateDirURL = resolveStatusBarStateDirURL()
     private let logDBURL = resolveCodexLogDBURL()
 
@@ -55,53 +117,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshStatus() {
-        currentStatus = loadRuntimeStatus()
+        currentTasks = loadRuntimeStatuses()
+        currentStatus = currentTasks.first ?? CodexTaskStatus.empty
         render()
     }
 
-    private func loadRuntimeStatus() -> CodexTaskStatus {
+    private func loadRuntimeStatuses() -> [CodexTaskStatus] {
         guard isCodexDesktopRunning() else {
-            return CodexTaskStatus(
+            return [CodexTaskStatus(
                 state: .closed,
                 task: "Codex closed",
                 detail: "Codex Desktop is not running.",
                 updatedAt: Date()
-            )
+            )]
         }
 
-        let records = loadSessionRecords().filter(isUsableHookRecord)
-        guard let lead = records.max(by: { left, right in
-            let leftPriority = priority(for: left.state)
-            let rightPriority = priority(for: right.state)
-            return leftPriority == rightPriority ? left.ts < right.ts : leftPriority < rightPriority
-        }) else {
-            return loadCoreLogStatus()
+        let records = loadSessionRecords()
+        let statuses = records
+            .filter(isUsableHookRecord)
+            .map(status(for:))
+            .sorted(by: isHigherPriority)
+
+        if statuses.isEmpty {
+            var fallback = loadCoreLogStatus()
+            if let latestRecord = records.max(by: { $0.ts < $1.ts }) {
+                fallback = fallback.withSessionMetadata(from: latestRecord, title: taskTitle(for: latestRecord))
+            }
+            return [fallback]
         }
 
-        if isActiveState(lead.state) {
-            return CodexTaskStatus(
-                state: .running,
-                task: "Codex running",
-                detail: lead.label.isEmpty ? lead.state : lead.label,
-                updatedAt: Date(timeIntervalSince1970: lead.ts)
-            )
+        return statuses
+    }
+
+    private func status(for record: HookSessionRecord) -> CodexTaskStatus {
+        let state: TaskState
+        if isActiveState(record.state) {
+            state = .running
+        } else if record.state == "done" {
+            state = .done
+        } else {
+            state = .idle
         }
 
-        if lead.state == "done" {
-            return CodexTaskStatus(
-                state: .done,
-                task: "Codex done",
-                detail: lead.label,
-                updatedAt: Date(timeIntervalSince1970: lead.ts)
-            )
-        }
+        let title = taskTitle(for: record)
+        let detail = [record.label, record.project]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != title }
+            .joined(separator: " / ")
 
         return CodexTaskStatus(
-            state: .idle,
-            task: "Codex idle",
-            detail: lead.label,
-            updatedAt: Date(timeIntervalSince1970: lead.ts)
+            state: state,
+            task: floatingStatusWord(for: state),
+            detail: detail,
+            updatedAt: Date(timeIntervalSince1970: record.ts),
+            sessionId: record.taskId.isEmpty ? record.sessionId : record.taskId,
+            title: title,
+            project: record.project,
+            focusTarget: record.focusTarget
         )
+    }
+
+    private func taskTitle(for record: HookSessionRecord) -> String {
+        let candidates = [record.taskTitle, record.threadName, record.project, record.sessionId]
+        return candidates
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty && $0 != "Untitled" } ?? "Codex task"
+    }
+
+    private func isHigherPriority(_ left: CodexTaskStatus, than right: CodexTaskStatus) -> Bool {
+        let leftPriority = priority(for: left.state)
+        let rightPriority = priority(for: right.state)
+        if leftPriority != rightPriority {
+            return leftPriority > rightPriority
+        }
+        return left.updatedAt > right.updatedAt
     }
 
     private func isCodexDesktopRunning() -> Bool {
@@ -137,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard isActiveState(record.state) else {
-            return true
+            return now - record.ts <= Self.idleRecordTTL
         }
 
         if let visibleUntilMs = record.visibleUntilMs, visibleUntilMs > 0 {
@@ -155,6 +244,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return 2
         }
         return 1
+    }
+
+    private func priority(for state: TaskState) -> Int {
+        switch state {
+        case .running:
+            return 2
+        case .done:
+            return 1
+        case .idle:
+            return 0
+        case .closed:
+            return -1
+        case .error:
+            return -2
+        }
     }
 
     private func isActiveState(_ state: String) -> Bool {
@@ -261,7 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render() {
         statusItem.button?.title = title(for: currentStatus)
         statusItem.button?.toolTip = tooltip(for: currentStatus)
-        statusItem.menu = makeMenu(for: currentStatus)
+        statusItem.menu = makeMenu()
         renderFloatingWindow(for: currentStatus)
     }
 
@@ -281,23 +385,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func tooltip(for status: CodexTaskStatus) -> String {
-        return status.task
+        if currentTasks.count <= 1 {
+            return status.title.isEmpty ? status.task : "\(status.task) - \(status.title)"
+        }
+
+        let lines = currentTasks.prefix(5).map { task in
+            taskStatusLine(for: task)
+        }
+        return lines.joined(separator: "\n")
     }
 
-    private func makeMenu(for status: CodexTaskStatus) -> NSMenu {
+    private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
-        let heading = NSMenuItem(title: status.task, action: nil, keyEquivalent: "")
+        let headingTitle = currentTasks.count <= 1 ? currentStatus.task : "\(currentStatus.task) - \(currentTasks.count) tasks"
+        let heading = NSMenuItem(title: headingTitle, action: nil, keyEquivalent: "")
         heading.isEnabled = false
         menu.addItem(heading)
 
-        if !status.detail.isEmpty {
-            let detail = NSMenuItem(title: status.detail, action: nil, keyEquivalent: "")
+        if currentTasks.count > 1 {
+            menu.addItem(.separator())
+            for task in currentTasks.prefix(12) {
+                let item = NSMenuItem(
+                    title: taskStatusLine(for: task),
+                    action: #selector(activateSelectedCodexTask(_:)),
+                    keyEquivalent: ""
+                )
+                item.representedObject = task.focusTarget
+                item.isEnabled = task.focusTarget.kind != "none"
+                menu.addItem(item)
+
+                if !task.detail.isEmpty {
+                    let detail = NSMenuItem(title: "  \(task.detail)", action: nil, keyEquivalent: "")
+                    detail.isEnabled = false
+                    menu.addItem(detail)
+                }
+            }
+        } else if !currentStatus.detail.isEmpty {
+            let detail = NSMenuItem(title: currentStatus.detail, action: nil, keyEquivalent: "")
             detail.isEnabled = false
             menu.addItem(detail)
         }
 
-        let updated = NSMenuItem(title: "Updated \(relativeTime(from: status.updatedAt))", action: nil, keyEquivalent: "")
+        let updated = NSMenuItem(title: "Updated \(relativeTime(from: currentStatus.updatedAt))", action: nil, keyEquivalent: "")
         updated.isEnabled = false
         menu.addItem(updated)
 
@@ -313,9 +443,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return menu
     }
 
+    private func displayTitle(for status: CodexTaskStatus) -> String {
+        if !status.title.isEmpty {
+            return status.title
+        }
+        if !status.sessionId.isEmpty {
+            return status.sessionId
+        }
+        return "Codex task"
+    }
+
+    private func taskStatusLine(for status: CodexTaskStatus) -> String {
+        "\(displayTitle(for: status)) \(shortStatusWord(for: status.state))"
+    }
+
     private func makeFloatingStatusWindow() {
+        let floatingSize = floatingWindowSize(forTaskCount: 1)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 166, height: 62),
+            contentRect: NSRect(origin: .zero, size: floatingSize),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -330,7 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = false
         window.delegate = self
 
-        let bounds = window.contentView?.bounds ?? NSRect(x: 0, y: 0, width: 166, height: 62)
+        let bounds = window.contentView?.bounds ?? NSRect(origin: .zero, size: floatingSize)
         let material = HoverStatusView(frame: bounds)
         material.onHoverChanged = { [weak self] isHovered in
             self?.setFloatingHover(isHovered)
@@ -342,24 +487,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         material.blendingMode = .behindWindow
         material.state = .active
         material.wantsLayer = true
-        material.layer?.cornerRadius = 20
+        material.layer?.cornerRadius = 22
         material.layer?.masksToBounds = true
 
         let hairline = NSView(frame: bounds)
         hairline.wantsLayer = true
-        hairline.layer?.cornerRadius = 20
+        hairline.layer?.cornerRadius = 22
         hairline.layer?.borderWidth = 1
         hairline.layer?.borderColor = floatingBorderColor(isHovered: false).cgColor
         hairline.layer?.backgroundColor = floatingBackgroundColor(isHovered: false).cgColor
 
         let highlight = NSView(frame: bounds.insetBy(dx: 1.5, dy: 1.5))
         highlight.wantsLayer = true
-        highlight.layer?.cornerRadius = 18.5
+        highlight.layer?.cornerRadius = 20.5
         highlight.layer?.borderWidth = 1
         highlight.layer?.borderColor = floatingHighlightColor(isHovered: false).cgColor
         highlight.layer?.backgroundColor = NSColor.clear.cgColor
 
-        let cat = CatStatusView(frame: NSRect(x: 8, y: 6, width: 58, height: 50))
+        let cat = CatStatusView(frame: NSRect(x: 18, y: 46, width: 54, height: 48))
 
         let title = NSTextField(labelWithString: "Codex")
         title.frame = NSRect(x: 70, y: 34, width: 45, height: 16)
@@ -367,22 +512,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         title.textColor = .labelColor
         title.isHidden = true
 
-        let status = NSTextField(labelWithString: "idle")
-        status.frame = NSRect(x: 68, y: 22, width: 88, height: 17)
+        let status = NSTextField(labelWithString: "Codex 0 jobs running")
+        status.frame = NSRect(x: 86, y: 64, width: 174, height: 20)
         status.alignment = .left
-        status.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+        status.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
         status.textColor = .secondaryLabelColor
+
+        let toggleButton = NSButton(frame: NSRect(x: 238, y: 56, width: 24, height: 24))
+        toggleButton.isBordered = false
+        toggleButton.image = floatingListToggleImage()
+        toggleButton.imagePosition = .imageOnly
+        toggleButton.contentTintColor = .secondaryLabelColor
+        toggleButton.toolTip = "Toggle task list"
+        toggleButton.target = self
+        toggleButton.action = #selector(toggleFloatingTaskList)
+        toggleButton.isHidden = true
+
+        let taskLabels = (0..<5).map { index in
+            let label = NSTextField(labelWithString: "")
+            label.frame = NSRect(x: 22, y: 18, width: 234, height: 15)
+            label.alignment = .left
+            label.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+            label.lineBreakMode = .byTruncatingTail
+            label.textColor = .secondaryLabelColor
+            label.isHidden = true
+            return label
+        }
 
         material.addSubview(hairline)
         material.addSubview(highlight)
         material.addSubview(cat)
         material.addSubview(title)
         material.addSubview(status)
+        material.addSubview(toggleButton)
+        taskLabels.forEach { material.addSubview($0) }
         window.contentView = material
 
         floatingWindow = window
         floatingTitleLabel = title
         floatingStatusLabel = status
+        floatingTaskLabels = taskLabels
+        floatingListToggleButton = toggleButton
         floatingCatView = cat
         floatingHairlineView = hairline
         floatingHighlightView = highlight
@@ -392,12 +562,118 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func renderFloatingWindow(for status: CodexTaskStatus) {
         floatingTitleLabel?.stringValue = "Codex"
-        floatingStatusLabel?.stringValue = floatingStatusWord(for: status)
+        layoutFloatingWindow()
+        floatingStatusLabel?.stringValue = floatingSummaryText()
         floatingStatusLabel?.font = floatingStatusFont(for: status)
         floatingStatusLabel?.textColor = isFloatingHovered ? .labelColor : floatingStatusTextColor(for: status)
         floatingCatView?.setState(status.state)
+        renderFloatingTaskListToggle()
+        renderFloatingTaskList()
+        floatingWindow?.contentView?.toolTip = tooltip(for: status)
         positionFloatingWindow()
         floatingWindow?.orderFrontRegardless()
+    }
+
+    private func layoutFloatingWindow() {
+        let rowCount = visibleFloatingTaskCount()
+        let size = floatingWindowSize(forTaskCount: rowCount)
+
+        if let window = floatingWindow, window.frame.size != size {
+            var frame = window.frame
+            let maxY = frame.maxY
+            frame.size = size
+            frame.origin.y = maxY - size.height
+            window.setFrame(frame, display: true)
+        }
+
+        let bounds = NSRect(origin: .zero, size: size)
+        floatingWindow?.contentView?.frame = bounds
+        floatingWindow?.contentView?.bounds = bounds
+        floatingHairlineView?.frame = bounds
+        floatingHighlightView?.frame = bounds.insetBy(dx: 1.5, dy: 1.5)
+
+        let catSize = NSSize(width: 54, height: 48)
+        let catY = rowCount == 0 ? ((size.height - catSize.height) / 2) + 3 : size.height - 14 - catSize.height
+        floatingCatView?.frame = NSRect(x: 18, y: catY, width: catSize.width, height: catSize.height)
+        let statusY = rowCount == 0 ? ((size.height - 20) / 2) + 2 : catY + 18
+        let hasToggle = !runningFloatingTasks().isEmpty
+        floatingStatusLabel?.frame = NSRect(x: 86, y: statusY, width: size.width - (hasToggle ? 132 : 108), height: 20)
+        floatingListToggleButton?.frame = NSRect(x: size.width - 38, y: statusY - 2, width: 24, height: 24)
+
+        let rowHeight: CGFloat = 16
+        let bottomPadding: CGFloat = 18
+        let firstRowY = bottomPadding + (CGFloat(rowCount - 1) * rowHeight)
+        for (index, label) in floatingTaskLabels.enumerated() {
+            label.frame = NSRect(x: 22, y: firstRowY - (CGFloat(index) * rowHeight), width: size.width - 44, height: 15)
+        }
+    }
+
+    private func visibleFloatingTaskCount() -> Int {
+        guard isFloatingTaskListExpanded else {
+            return 0
+        }
+        return min(runningFloatingTasks().count, floatingTaskLabels.count)
+    }
+
+    private func floatingWindowSize(forTaskCount taskCount: Int) -> NSSize {
+        let rowCount = max(0, min(taskCount, 5))
+        if rowCount == 0 {
+            return NSSize(width: 310, height: 72)
+        }
+        return NSSize(width: 310, height: 92 + CGFloat(rowCount * 16))
+    }
+
+    private func floatingSummaryText() -> String {
+        let runningCount = runningFloatingTasks().count
+        if runningCount == 0 {
+            return "Codex idle"
+        }
+        return "Codex \(runningCount) \(runningCount == 1 ? "job" : "jobs") running"
+    }
+
+    private func renderFloatingTaskList() {
+        guard isFloatingTaskListExpanded else {
+            for label in floatingTaskLabels {
+                label.isHidden = true
+                label.stringValue = ""
+            }
+            return
+        }
+
+        let tasks = Array(runningFloatingTasks().prefix(floatingTaskLabels.count))
+        for (index, label) in floatingTaskLabels.enumerated() {
+            guard index < tasks.count else {
+                label.isHidden = true
+                label.stringValue = ""
+                continue
+            }
+
+            let task = tasks[index]
+            label.isHidden = false
+            label.stringValue = taskStatusLine(for: task)
+            label.textColor = task.state == .running ? .labelColor : .secondaryLabelColor
+        }
+    }
+
+    private func runningFloatingTasks() -> [CodexTaskStatus] {
+        currentTasks.filter { $0.state == .running }
+    }
+
+    private func renderFloatingTaskListToggle() {
+        let hasRunningTasks = !runningFloatingTasks().isEmpty
+        floatingListToggleButton?.isHidden = !hasRunningTasks
+        floatingListToggleButton?.image = floatingListToggleImage()
+        floatingListToggleButton?.contentTintColor = isFloatingHovered ? .labelColor : .secondaryLabelColor
+    }
+
+    private func floatingListToggleImage() -> NSImage? {
+        let symbolName = isFloatingTaskListExpanded ? "eye.slash" : "eye"
+        return NSImage(systemSymbolName: symbolName, accessibilityDescription: "Toggle task list")
+    }
+
+    @objc private func toggleFloatingTaskList() {
+        isFloatingTaskListExpanded.toggle()
+        render()
     }
 
     private func setFloatingHover(_ isHovered: Bool) {
@@ -408,6 +684,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isFloatingHovered = isHovered
         floatingCatView?.setHovered(isHovered)
         floatingStatusLabel?.textColor = isHovered ? .labelColor : floatingStatusTextColor(for: currentStatus)
+        renderFloatingTaskListToggle()
 
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.16)
@@ -433,7 +710,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func floatingStatusWord(for status: CodexTaskStatus) -> String {
-        switch status.state {
+        floatingStatusWord(for: status.state)
+    }
+
+    private func floatingStatusWord(for state: TaskState) -> String {
+        switch state {
         case .idle:
             return "Codex idle"
         case .running:
@@ -447,9 +728,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func shortStatusWord(for state: TaskState) -> String {
+        switch state {
+        case .idle:
+            return "idle"
+        case .running:
+            return "running"
+        case .done:
+            return "done"
+        case .closed:
+            return "closed"
+        case .error:
+            return "error"
+        }
+    }
+
     private func floatingStatusFont(for status: CodexTaskStatus) -> NSFont {
-        let size: CGFloat = status.state == .running || status.state == .closed ? 9 : 11
-        return NSFont.monospacedSystemFont(ofSize: size, weight: .semibold)
+        NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold)
     }
 
     private func floatingStatusColor(for status: CodexTaskStatus) -> NSColor {
@@ -542,21 +837,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.activateFileViewerSelecting([stateDirURL])
     }
 
+    @objc private func activateSelectedCodexTask(_ sender: NSMenuItem) {
+        if let target = sender.representedObject as? FocusTarget {
+            activate(target: target)
+        } else {
+            activateCodexDesktop()
+        }
+    }
+
+    private func activate(target: FocusTarget) {
+        switch target.kind {
+        case "url":
+            if let url = URL(string: target.url), NSWorkspace.shared.open(url) {
+                return
+            }
+            if let fallback = target.fallback {
+                activate(target: fallback)
+                return
+            }
+            activateCodexDesktop()
+        case "bundle":
+            activateApplication(bundleId: target.bundleId)
+        case "app":
+            activateApplication(named: target.appName)
+        default:
+            activateCodexDesktop()
+        }
+    }
+
     @objc private func activateCodexDesktop() {
+        activateApplication(bundleId: "com.openai.codex")
+    }
+
+    private func activateApplication(bundleId: String) {
         if let application = NSWorkspace.shared.runningApplications.first(where: { application in
-            application.bundleIdentifier == "com.openai.codex"
+            application.bundleIdentifier == bundleId
         }) {
             application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
             return
         }
 
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex") else {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
             return
         }
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         NSWorkspace.shared.openApplication(at: url, configuration: configuration)
+    }
+
+    private func activateApplication(named appName: String) {
+        guard !appName.isEmpty else {
+            return
+        }
+
+        if let application = NSWorkspace.shared.runningApplications.first(where: { application in
+            application.localizedName == appName
+        }) {
+            application.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            return
+        }
+
+        NSWorkspace.shared.launchApplication(appName)
     }
 
     @objc private func quit() {
@@ -576,12 +918,24 @@ struct HookSessionRecord: Decodable {
     let label: String
     let ts: Double
     let visibleUntilMs: Double?
+    let sessionId: String
+    let taskId: String
+    let taskTitle: String
+    let threadName: String
+    let project: String
+    let focusTarget: FocusTarget
 
     enum CodingKeys: String, CodingKey {
         case state
         case label
         case ts
         case visibleUntilMs
+        case sessionId
+        case taskId
+        case taskTitle
+        case threadName
+        case project
+        case focusTarget
     }
 
     init(from decoder: Decoder) throws {
@@ -590,6 +944,12 @@ struct HookSessionRecord: Decodable {
         label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
         ts = try container.decodeIfPresent(Double.self, forKey: .ts) ?? 0
         visibleUntilMs = try container.decodeIfPresent(Double.self, forKey: .visibleUntilMs)
+        sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId) ?? ""
+        taskId = try container.decodeIfPresent(String.self, forKey: .taskId) ?? ""
+        taskTitle = try container.decodeIfPresent(String.self, forKey: .taskTitle) ?? ""
+        threadName = try container.decodeIfPresent(String.self, forKey: .threadName) ?? ""
+        project = try container.decodeIfPresent(String.self, forKey: .project) ?? ""
+        focusTarget = try container.decodeIfPresent(FocusTarget.self, forKey: .focusTarget) ?? .none
     }
 }
 
@@ -602,7 +962,10 @@ final class HoverStatusView: NSVisualEffectView {
     private var didDrag = false
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        super.hitTest(point) == nil ? nil : self
+        guard let hitView = super.hitTest(point) else {
+            return nil
+        }
+        return hitView is NSButton ? hitView : self
     }
 
     override func updateTrackingAreas() {

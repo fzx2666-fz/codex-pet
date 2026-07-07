@@ -1,9 +1,9 @@
 # Codex Pet
 
-A tiny macOS status pet that shows the current Codex Desktop runtime state in a
-draggable pixel-cat capsule.
+A tiny macOS status pet that shows Codex Desktop runtime state in a draggable
+pixel-cat capsule.
 
-It prefers hook state records written by Codex hook events:
+It prefers per-session hook state records written by Codex hook events:
 
 ```text
 ~/.codex/statusbar/state.d/<session_id>.json
@@ -19,10 +19,12 @@ to Codex's own runtime log database:
 Set `CODEX_STATUSBAR_STATE_DIR` before launching the app if you want to use a different state directory.
 Set `CODEX_LOG_DB` before launching the app if Codex stores logs elsewhere.
 
-The display is driven by real Codex hook events or Codex core log events:
+The capsule shows the leading task, while the menu lists recent hook-backed
+sessions separately. The display is driven by real Codex hook events or Codex
+core log events:
 
 - `Codex running`: a session is thinking, using a tool, compacting, waiting, or requesting permission.
-- `Codex done`: the latest selected session just completed.
+- `Codex done`: a selected session just completed.
 - `Codex idle`: Codex is open and there are no active hook state records.
 - `Codex closed`: Codex Desktop is not running.
 

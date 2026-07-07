@@ -72,11 +72,14 @@ function run() {
     const now = Date.now() / 1000;
     const pid = Number(process.ppid || 0);
     const surface = resolveSessionSurface(payload, {}, process.env, { pid, sessionId });
+    const threadName = latestThreadName(sessionId);
     writeJsonAtomic(statePath, {
       state: "idle",
       label: "",
       tool: "",
-      threadName: latestThreadName(sessionId),
+      taskId: sessionId,
+      taskTitle: threadName,
+      threadName,
       project: basename(payload.cwd || payload.working_directory || payload.current_working_directory),
       sessionId,
       turnId: "",
@@ -96,12 +99,15 @@ function run() {
       const now = Date.now() / 1000;
       const pid = Number(prev.pid || process.ppid || 0);
       const surface = resolveSessionSurface(payload, prev, process.env, { pid, sessionId });
+      const threadName = latestThreadName(sessionId);
       writeJsonAtomic(statePath, {
         ...prev,
         state: "done",
         label: "Done",
         tool: "",
-        threadName: latestThreadName(sessionId),
+        taskId: sessionId,
+        taskTitle: threadName,
+        threadName,
         project: basename(payload.cwd || payload.working_directory || payload.current_working_directory) || prev.project || "",
         sessionId,
         turnId: "",

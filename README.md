@@ -2,12 +2,17 @@
 
 A tiny macOS status pet for watching Codex Desktop activity at a glance.
 
-It shows a draggable pixel-cat capsule with the current state:
+It shows a draggable pixel-cat capsule with the leading Codex state, and the
+menu lists each recent Codex session separately:
 
 - `idle`: Codex is open and no recent task is active.
 - `running`: Codex is thinking, using tools, compacting, waiting, or asking for permission.
 - `done`: the latest turn just completed.
 - `closed`: Codex Desktop is not running.
+
+When hooks are installed, each file under `~/.codex/statusbar/state.d` maps to
+one Codex session/task, so multiple Codex conversations can be tracked
+independently.
 
 The UI uses the classic MIT-licensed `oneko.gif` sprite from
 [adryd325/oneko.js](https://github.com/adryd325/oneko.js).

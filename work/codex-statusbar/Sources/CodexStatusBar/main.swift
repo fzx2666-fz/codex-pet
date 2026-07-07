@@ -94,10 +94,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var floatingTaskLabels: [NSTextField] = []
     private var floatingListToggleButton: NSButton?
     private var floatingCatView: CatStatusView?
-    private var floatingHairlineView: NSView?
+    private var floatingHairlineView: GlassPanelView?
     private var floatingHighlightView: NSView?
     private var isFloatingHovered = false
     private var isFloatingTaskListExpanded = true
+    private var isProgrammaticallyMovingFloatingWindow = false
+    private let collapsedFloatingSize = NSSize(width: 72, height: 72)
     private var timer: Timer?
     private var currentStatus = CodexTaskStatus.empty
     private var currentTasks = [CodexTaskStatus.empty]
@@ -458,7 +460,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func makeFloatingStatusWindow() {
-        let floatingSize = floatingWindowSize(forTaskCount: 1)
+        let floatingSize = floatingWindowSize(forTaskCount: 0)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: floatingSize),
             styleMask: [.borderless],
@@ -470,7 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         window.backgroundColor = .clear
         window.isOpaque = false
-        window.hasShadow = false
+        window.hasShadow = true
         window.ignoresMouseEvents = false
         window.isMovableByWindowBackground = false
         window.delegate = self
@@ -483,19 +485,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         material.onClick = { [weak self] in
             self?.activateCodexDesktop()
         }
-        material.material = .hudWindow
-        material.blendingMode = .behindWindow
-        material.state = .active
         material.wantsLayer = true
         material.layer?.cornerRadius = 22
         material.layer?.masksToBounds = true
+        material.layer?.backgroundColor = NSColor.clear.cgColor
 
-        let hairline = NSView(frame: bounds)
-        hairline.wantsLayer = true
-        hairline.layer?.cornerRadius = 22
-        hairline.layer?.borderWidth = 1
-        hairline.layer?.borderColor = floatingBorderColor(isHovered: false).cgColor
-        hairline.layer?.backgroundColor = floatingBackgroundColor(isHovered: false).cgColor
+        let hairline = GlassPanelView(frame: bounds)
 
         let highlight = NSView(frame: bounds.insetBy(dx: 1.5, dy: 1.5))
         highlight.wantsLayer = true
@@ -570,35 +565,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         renderFloatingTaskListToggle()
         renderFloatingTaskList()
         floatingWindow?.contentView?.toolTip = tooltip(for: status)
-        positionFloatingWindow()
         floatingWindow?.orderFrontRegardless()
     }
 
     private func layoutFloatingWindow() {
         let rowCount = visibleFloatingTaskCount()
         let size = floatingWindowSize(forTaskCount: rowCount)
+        let isExpanded = isFloatingHovered
 
         if let window = floatingWindow, window.frame.size != size {
             var frame = window.frame
+            let centerX = frame.midX
             let maxY = frame.maxY
             frame.size = size
+            frame.origin.x = centerX - (size.width / 2)
             frame.origin.y = maxY - size.height
+            isProgrammaticallyMovingFloatingWindow = true
             window.setFrame(frame, display: true)
+            isProgrammaticallyMovingFloatingWindow = false
         }
 
         let bounds = NSRect(origin: .zero, size: size)
         floatingWindow?.contentView?.frame = bounds
         floatingWindow?.contentView?.bounds = bounds
+        let cornerRadius = isExpanded ? CGFloat(22) : min(size.width, size.height) / 2
+        floatingWindow?.contentView?.layer?.cornerRadius = cornerRadius
         floatingHairlineView?.frame = bounds
         floatingHighlightView?.frame = bounds.insetBy(dx: 1.5, dy: 1.5)
+        floatingHighlightView?.layer?.cornerRadius = max(0, cornerRadius - 1.5)
 
         let catSize = NSSize(width: 54, height: 48)
-        let catY = rowCount == 0 ? ((size.height - catSize.height) / 2) + 3 : size.height - 14 - catSize.height
-        floatingCatView?.frame = NSRect(x: 18, y: catY, width: catSize.width, height: catSize.height)
+        let catX = isExpanded ? CGFloat(18) : (size.width - catSize.width) / 2
+        let catY: CGFloat
+        if !isExpanded {
+            catY = (size.height - catSize.height) / 2 + 2
+        } else if rowCount == 0 {
+            catY = ((size.height - catSize.height) / 2) + 3
+        } else {
+            catY = size.height - 14 - catSize.height
+        }
+        floatingCatView?.frame = NSRect(x: catX, y: catY, width: catSize.width, height: catSize.height)
         let statusY = rowCount == 0 ? ((size.height - 20) / 2) + 2 : catY + 18
         let hasToggle = !runningFloatingTasks().isEmpty
         floatingStatusLabel?.frame = NSRect(x: 86, y: statusY, width: size.width - (hasToggle ? 132 : 108), height: 20)
+        floatingStatusLabel?.isHidden = !isExpanded
         floatingListToggleButton?.frame = NSRect(x: size.width - 38, y: statusY - 2, width: 24, height: 24)
+        floatingHighlightView?.isHidden = false
 
         let rowHeight: CGFloat = 16
         let bottomPadding: CGFloat = 18
@@ -609,6 +621,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func visibleFloatingTaskCount() -> Int {
+        guard isFloatingHovered else {
+            return 0
+        }
         guard isFloatingTaskListExpanded else {
             return 0
         }
@@ -616,6 +631,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func floatingWindowSize(forTaskCount taskCount: Int) -> NSSize {
+        guard isFloatingHovered else {
+            return collapsedFloatingSize
+        }
         let rowCount = max(0, min(taskCount, 5))
         if rowCount == 0 {
             return NSSize(width: 310, height: 72)
@@ -632,6 +650,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func renderFloatingTaskList() {
+        guard isFloatingHovered else {
+            for label in floatingTaskLabels {
+                label.isHidden = true
+                label.stringValue = ""
+            }
+            return
+        }
+
         guard isFloatingTaskListExpanded else {
             for label in floatingTaskLabels {
                 label.isHidden = true
@@ -661,7 +687,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func renderFloatingTaskListToggle() {
         let hasRunningTasks = !runningFloatingTasks().isEmpty
-        floatingListToggleButton?.isHidden = !hasRunningTasks
+        floatingListToggleButton?.isHidden = !isFloatingHovered || !hasRunningTasks
         floatingListToggleButton?.image = floatingListToggleImage()
         floatingListToggleButton?.contentTintColor = isFloatingHovered ? .labelColor : .secondaryLabelColor
     }
@@ -683,30 +709,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         isFloatingHovered = isHovered
         floatingCatView?.setHovered(isHovered)
+        layoutFloatingWindow()
         floatingStatusLabel?.textColor = isHovered ? .labelColor : floatingStatusTextColor(for: currentStatus)
         renderFloatingTaskListToggle()
+        renderFloatingTaskList()
 
         CATransaction.begin()
         CATransaction.setAnimationDuration(0.16)
-        floatingHairlineView?.layer?.borderColor = floatingBorderColor(isHovered: isHovered).cgColor
-        floatingHairlineView?.layer?.backgroundColor = floatingBackgroundColor(isHovered: isHovered).cgColor
+        floatingHairlineView?.setHovered(isHovered)
         floatingHighlightView?.layer?.borderColor = floatingHighlightColor(isHovered: isHovered).cgColor
         CATransaction.commit()
     }
 
-    private func floatingBackgroundColor(isHovered: Bool) -> NSColor {
-        if isHovered {
-            return NSColor(calibratedRed: 0.72, green: 0.88, blue: 1.00, alpha: 0.98)
-        }
-        return NSColor(calibratedRed: 0.83, green: 0.94, blue: 1.00, alpha: 0.97)
-    }
-
-    private func floatingBorderColor(isHovered: Bool) -> NSColor {
-        NSColor(calibratedRed: 0.32, green: 0.58, blue: 0.78, alpha: isHovered ? 0.50 : 0.34)
-    }
-
     private func floatingHighlightColor(isHovered: Bool) -> NSColor {
-        NSColor.white.withAlphaComponent(isHovered ? 0.58 : 0.44)
+        NSColor.white.withAlphaComponent(isHovered ? 0.72 : 0.52)
     }
 
     private func floatingStatusWord(for status: CodexTaskStatus) -> String {
@@ -786,7 +802,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fallback = NSPoint(x: frame.maxX - size.width - 12, y: frame.maxY - size.height - 8)
         let saved = UserDefaults.standard.string(forKey: Self.floatingWindowOriginKey).flatMap(NSPointFromString)
         let origin = clamp(saved ?? fallback, size: size, in: frame)
+        isProgrammaticallyMovingFloatingWindow = true
         window.setFrameOrigin(origin)
+        isProgrammaticallyMovingFloatingWindow = false
     }
 
     private func clamp(_ origin: NSPoint, size: NSSize, in frame: NSRect) -> NSPoint {
@@ -797,7 +815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func saveFloatingWindowOrigin() {
-        guard let window = floatingWindow else {
+        guard !isProgrammaticallyMovingFloatingWindow, let window = floatingWindow else {
             return
         }
         UserDefaults.standard.set(NSStringFromPoint(window.frame.origin), forKey: Self.floatingWindowOriginKey)
@@ -953,13 +971,88 @@ struct HookSessionRecord: Decodable {
     }
 }
 
-final class HoverStatusView: NSVisualEffectView {
+final class GlassPanelView: NSView {
+    private var isHovered = false
+
+    override var isOpaque: Bool {
+        false
+    }
+
+    func setHovered(_ isHovered: Bool) {
+        guard self.isHovered != isHovered else {
+            return
+        }
+        self.isHovered = isHovered
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        let rect = bounds.insetBy(dx: 2, dy: 2)
+        let radius = min(rect.height / 2, bounds.width <= 80 ? rect.width / 2 : 23)
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+
+        NSGraphicsContext.saveGraphicsState()
+
+        let baseGradient = NSGradient(colors: glassBaseColors(isHovered: isHovered))!
+        path.addClip()
+        baseGradient.draw(in: rect, angle: -28)
+
+        let upperGlowRect = rect.insetBy(dx: 5, dy: 4)
+        let upperGlow = NSBezierPath(roundedRect: upperGlowRect, xRadius: radius - 5, yRadius: radius - 5)
+        let glowGradient = NSGradient(colors: [
+            NSColor.white.withAlphaComponent(isHovered ? 0.62 : 0.46),
+            NSColor.white.withAlphaComponent(0.06),
+            NSColor.clear
+        ])!
+        upperGlow.addClip()
+        glowGradient.draw(in: upperGlowRect, angle: 92)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSColor(calibratedWhite: 1.0, alpha: isHovered ? 0.82 : 0.68).setStroke()
+        path.lineWidth = 1.4
+        path.stroke()
+
+        let innerRect = rect.insetBy(dx: 2, dy: 2)
+        let innerPath = NSBezierPath(roundedRect: innerRect, xRadius: radius - 2, yRadius: radius - 2)
+        NSColor(calibratedRed: 0.70, green: 0.64, blue: 0.82, alpha: isHovered ? 0.36 : 0.24).setStroke()
+        innerPath.lineWidth = 1
+        innerPath.stroke()
+
+    }
+
+    private func glassBaseColors(isHovered: Bool) -> [NSColor] {
+        if isHovered {
+            return [
+                NSColor(calibratedRed: 1.00, green: 0.99, blue: 0.94, alpha: 0.96),
+                NSColor(calibratedRed: 0.86, green: 0.96, blue: 0.91, alpha: 0.94),
+                NSColor(calibratedRed: 0.95, green: 0.89, blue: 1.00, alpha: 0.94),
+                NSColor(calibratedRed: 0.82, green: 0.93, blue: 0.94, alpha: 0.95)
+            ]
+        }
+
+        return [
+            NSColor(calibratedRed: 1.00, green: 0.99, blue: 0.95, alpha: 0.92),
+            NSColor(calibratedRed: 0.90, green: 0.97, blue: 0.92, alpha: 0.90),
+            NSColor(calibratedRed: 0.96, green: 0.91, blue: 1.00, alpha: 0.90),
+            NSColor(calibratedRed: 0.86, green: 0.94, blue: 0.94, alpha: 0.92)
+        ]
+    }
+}
+
+final class HoverStatusView: NSView {
     var onHoverChanged: ((Bool) -> Void)?
     var onClick: (() -> Void)?
     private var trackingAreaRef: NSTrackingArea?
     private var mouseDownScreenPoint: NSPoint?
     private var mouseDownWindowOrigin: NSPoint?
     private var didDrag = false
+
+    override var isOpaque: Bool {
+        false
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let hitView = super.hitTest(point) else {

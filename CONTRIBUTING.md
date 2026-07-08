@@ -7,14 +7,13 @@ Thanks for helping improve Codex Pet.
 Build the macOS app:
 
 ```sh
-cd work/codex-statusbar
 ./scripts/build-release.sh
 ```
 
 Run the built app:
 
 ```sh
-open outputs/CodexPet.app
+open dist/CodexPet.app
 ```
 
 ## Guidelines
@@ -30,7 +29,6 @@ open outputs/CodexPet.app
 Before opening a pull request:
 
 ```sh
-cd work/codex-statusbar
 ./scripts/build-release.sh
 ```
 

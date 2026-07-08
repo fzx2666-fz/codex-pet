@@ -437,7 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Refresh", action: #selector(refreshNow), keyEquivalent: "r"))
         menu.addItem(NSMenuItem(title: "Open Codex Log DB", action: #selector(openLogDatabase), keyEquivalent: "o"))
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Codex Status", action: #selector(quit), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Codex Pet", action: #selector(quit), keyEquivalent: "q"))
 
         for item in menu.items where item.action != nil {
             item.target = self

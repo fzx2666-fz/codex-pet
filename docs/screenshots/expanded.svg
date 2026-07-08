@@ -1,0 +1,44 @@
+<svg width="720" height="300" viewBox="0 0 720 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="glass" x1="170" y1="86" x2="550" y2="214" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF2"/>
+      <stop offset="0.36" stop-color="#E5F8EB"/>
+      <stop offset="0.66" stop-color="#F5E9FF"/>
+      <stop offset="1" stop-color="#DDF3F1"/>
+    </linearGradient>
+    <filter id="shadow" x="134" y="50" width="452" height="214" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#486172" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#ffffff" flood-opacity="0.78"/>
+    </filter>
+  </defs>
+  <rect width="720" height="300" rx="28" fill="#F6F7F8"/>
+  <text x="360" y="42" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="15" fill="#66737B">Hover: expanded job list</text>
+  <g filter="url(#shadow)">
+    <rect x="160" y="74" width="400" height="152" rx="28" fill="url(#glass)" stroke="white" stroke-width="2"/>
+    <rect x="164" y="78" width="392" height="144" rx="25" stroke="#B7A8D2" stroke-opacity="0.36"/>
+    <path d="M172 90C202 80 246 80 300 92" stroke="white" stroke-width="10" stroke-linecap="round" opacity="0.35"/>
+  </g>
+  <g transform="translate(190 104)" fill="#111">
+    <rect x="6" y="18" width="4" height="18"/>
+    <rect x="10" y="14" width="4" height="4"/>
+    <rect x="14" y="10" width="4" height="4"/>
+    <rect x="18" y="6" width="4" height="4"/>
+    <rect x="22" y="10" width="4" height="4"/>
+    <rect x="26" y="14" width="16" height="4"/>
+    <rect x="42" y="10" width="4" height="4"/>
+    <rect x="46" y="6" width="4" height="4"/>
+    <rect x="50" y="10" width="4" height="20"/>
+    <rect x="10" y="36" width="40" height="4"/>
+    <rect x="14" y="40" width="8" height="4"/>
+    <rect x="34" y="40" width="12" height="4"/>
+    <rect x="30" y="22" width="4" height="4"/>
+    <rect x="44" y="22" width="4" height="4"/>
+  </g>
+  <text x="280" y="132" font-family="'SF Mono', Menlo, Consolas, monospace" font-size="21" font-weight="700" fill="#3F4B52">Codex 1 job running</text>
+  <g stroke="#4D5960" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(512 118)">
+    <path d="M2 11s7-9 16-9 16 9 16 9-7 9-16 9S2 11 2 11z"/>
+    <path d="M14 11a4 4 0 1 0 8 0 4 4 0 0 0-8 0z"/>
+    <path d="M1 1l34 24"/>
+  </g>
+  <text x="190" y="180" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="18" font-weight="650" fill="#3F4B52">Refine README and install flow running</text>
+</svg>

@@ -1,0 +1,36 @@
+<svg width="360" height="220" viewBox="0 0 360 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="glass" x1="124" y1="74" x2="236" y2="146" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF2"/>
+      <stop offset="0.38" stop-color="#E5F8EB"/>
+      <stop offset="0.68" stop-color="#F5E9FF"/>
+      <stop offset="1" stop-color="#DDF3F1"/>
+    </linearGradient>
+    <filter id="shadow" x="94" y="44" width="172" height="172" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#486172" flood-opacity="0.20"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#ffffff" flood-opacity="0.75"/>
+    </filter>
+  </defs>
+  <rect width="360" height="220" rx="24" fill="#F6F7F8"/>
+  <text x="180" y="38" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif" font-size="15" fill="#66737B">Default: quiet pet</text>
+  <g filter="url(#shadow)">
+    <circle cx="180" cy="110" r="36" fill="url(#glass)" stroke="white" stroke-width="2"/>
+    <circle cx="180" cy="110" r="33" stroke="#B7A8D2" stroke-opacity="0.34"/>
+  </g>
+  <g transform="translate(153 87)" fill="#111">
+    <rect x="6" y="18" width="4" height="18"/>
+    <rect x="10" y="14" width="4" height="4"/>
+    <rect x="14" y="10" width="4" height="4"/>
+    <rect x="18" y="6" width="4" height="4"/>
+    <rect x="22" y="10" width="4" height="4"/>
+    <rect x="26" y="14" width="16" height="4"/>
+    <rect x="42" y="10" width="4" height="4"/>
+    <rect x="46" y="6" width="4" height="4"/>
+    <rect x="50" y="10" width="4" height="20"/>
+    <rect x="10" y="36" width="40" height="4"/>
+    <rect x="14" y="40" width="8" height="4"/>
+    <rect x="34" y="40" width="12" height="4"/>
+    <rect x="30" y="22" width="4" height="4"/>
+    <rect x="44" y="22" width="4" height="4"/>
+  </g>
+</svg>

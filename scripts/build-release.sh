@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO_DIR="$(cd "$ROOT_DIR/../.." && pwd)"
-OUTPUT_DIR="$REPO_DIR/outputs"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PACKAGE_DIR="$REPO_DIR/work/codex-statusbar"
+OUTPUT_DIR="$REPO_DIR/dist"
 APP_DIR="$OUTPUT_DIR/CodexPet.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 
-cd "$ROOT_DIR"
+cd "$PACKAGE_DIR"
 swift build -c release
 
 mkdir -p "$MACOS_DIR" "$CONTENTS_DIR/Resources"
@@ -22,7 +22,7 @@ if [[ -n "$RESOURCE_BUNDLE" ]]; then
   cp -R "$RESOURCE_BUNDLE" "$CONTENTS_DIR/Resources/CodexStatusBar_CodexStatusBar.bundle"
 fi
 
-HOOKS_DIR="$ROOT_DIR/scripts/codex-hooks"
+HOOKS_DIR="$REPO_DIR/scripts/codex-hooks"
 if [[ -d "$HOOKS_DIR" ]]; then
   cp "$HOOKS_DIR/codex-status-writer.js" "$CONTENTS_DIR/Resources/codex-status-writer.js"
   cp "$HOOKS_DIR/codex-lifecycle-writer.js" "$CONTENTS_DIR/Resources/codex-lifecycle-writer.js"

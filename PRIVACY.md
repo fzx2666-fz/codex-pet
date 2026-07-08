@@ -41,5 +41,5 @@ idle, running, or recently done.
 After building the app, uninstall hooks with:
 
 ```sh
-node outputs/CodexPet.app/Contents/Resources/uninstall-codex-statusbar.js
+node dist/CodexPet.app/Contents/Resources/uninstall-codex-statusbar.js
 ```

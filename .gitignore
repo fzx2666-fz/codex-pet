@@ -5,10 +5,8 @@
 work/codex-statusbar/.build/
 
 # Local deliverables and generated app bundles
-outputs/CodexStatusBar.app/
-outputs/CodexPet.app/
-outputs/codex-status
-outputs/.DS_Store
+dist/
+outputs/
 
 # Temporary experiments and reference clones
 work/remote-codex-status-bar/

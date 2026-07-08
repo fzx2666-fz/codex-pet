@@ -12,5 +12,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build release app
-        working-directory: work/codex-statusbar
         run: ./scripts/build-release.sh

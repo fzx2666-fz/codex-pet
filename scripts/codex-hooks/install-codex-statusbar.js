@@ -16,7 +16,8 @@ const repoRoot = path.resolve(__dirname, "..");
 const hooksPath = path.join(home, ".codex", "hooks.json");
 
 function main() {
-  const appPath = parseAppPathArg();
+  const rawAppPath = parseAppPathArg();
+  const appPath = rawAppPath ? path.resolve(rawAppPath) : "";
   const nodePath = findNode({ currentExecPath: process.execPath });
   const { writerPath, lifecyclePath } = resolveScriptPaths({ scriptDir: __dirname, repoRoot, appPath });
 

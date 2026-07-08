@@ -1,104 +1,180 @@
 # Codex Pet
 
-A tiny macOS status pet for watching Codex Desktop activity at a glance.
+A tiny macOS desktop pet for watching Codex Desktop jobs without keeping the
+Codex window in focus.
 
-It shows a draggable pixel-cat capsule with the leading Codex state, and the
-menu lists each recent Codex session separately:
+By default Codex Pet sits on your desktop as a small draggable cat. Hover it to
+expand a glass panel with the current Codex job count and per-conversation
+running tasks.
 
-- `idle`: Codex is open and no recent task is active.
+<p align="center">
+  <img src="docs/screenshots/collapsed.svg" width="300" alt="Codex Pet collapsed as a small circular cat widget">
+  <img src="docs/screenshots/expanded.svg" width="520" alt="Codex Pet expanded to show Codex running jobs">
+</p>
+
+## Features
+
+- Quiet collapsed mode: just a circular pixel cat.
+- Hover-to-expand job list for active Codex conversations.
+- Real Codex state from hook events, not a guessed timer.
+- Per-session tracking when multiple Codex conversations are running.
+- Draggable floating window with saved position.
+- Local-only: no telemetry and no network requests.
+
+Codex Pet shows:
+
+- `idle`: Codex Desktop is open and no job is active.
 - `running`: Codex is thinking, using tools, compacting, waiting, or asking for permission.
 - `done`: the latest turn just completed.
 - `closed`: Codex Desktop is not running.
 
-When hooks are installed, each file under `~/.codex/statusbar/state.d` maps to
-one Codex session/task, so multiple Codex conversations can be tracked
-independently.
+## Quick Start
 
-The UI uses the classic MIT-licensed `oneko.gif` sprite from
-[adryd325/oneko.js](https://github.com/adryd325/oneko.js).
-
-## Requirements
+Requirements:
 
 - macOS 13 or newer
-- Swift 5.9 or newer
 - Codex Desktop
-- Node.js, only for installing the optional Codex hook writers
+- Swift 5.9 or newer, usually from Xcode Command Line Tools
+- Node.js for the Codex hook installer
 
-## Build
+Clone and start:
 
 ```sh
-cd work/codex-statusbar
+git clone https://github.com/fzx2666-fz/codex-pet.git
+cd codex-pet
+./scripts/install-and-start.sh
+```
+
+The script will:
+
+1. Build `dist/CodexPet.app`.
+2. Install or repair Codex hooks in `~/.codex/hooks.json`.
+3. Start Codex Pet.
+
+After the first install, start a new Codex prompt so the hooks can write fresh
+state. Hover the cat to expand the job list.
+
+## Daily Use
+
+Start the app:
+
+```sh
+open dist/CodexPet.app
+```
+
+Repair hooks after moving the repository or rebuilding:
+
+```sh
+node dist/CodexPet.app/Contents/Resources/install-codex-statusbar.js --app-path dist/CodexPet.app
+```
+
+Remove Codex Pet hooks:
+
+```sh
+node dist/CodexPet.app/Contents/Resources/uninstall-codex-statusbar.js
+```
+
+Quit Codex Pet from the macOS menu bar item, or use Activity Monitor.
+
+## How It Works
+
+Codex Pet reads per-session hook state files written by Codex hook events:
+
+```text
+~/.codex/statusbar/state.d/<session_id>.json
+```
+
+Each file maps to one Codex session, which lets the floating panel list running
+conversations independently. If hook files are unavailable, the app falls back
+to the local Codex runtime log database:
+
+```text
+~/.codex/logs_2.sqlite
+```
+
+The installer updates `~/.codex/hooks.json` and creates a one-time backup:
+
+```text
+~/.codex/hooks.json.bak-codex-pet
+```
+
+## Troubleshooting
+
+**The cat stays idle while Codex is working.**
+
+Run the hook installer again, then start a new Codex prompt:
+
+```sh
+node dist/CodexPet.app/Contents/Resources/install-codex-statusbar.js --app-path dist/CodexPet.app
+```
+
+**The app says `closed`.**
+
+Open Codex Desktop. `closed` means Codex Pet cannot find the Codex Desktop
+process.
+
+**The app opens twice.**
+
+Quit all existing instances, then open one app:
+
+```sh
+pkill -x CodexPet
+open dist/CodexPet.app
+```
+
+**You moved the app or repository.**
+
+Run `./scripts/install-and-start.sh` again so hooks point at the new app path.
+
+## Development
+
+Build only:
+
+```sh
 ./scripts/build-release.sh
 ```
 
 Build outputs are written to:
 
 ```text
-outputs/CodexPet.app
-outputs/codex-status
+dist/CodexPet.app
+dist/codex-status
 ```
 
-## Run
+Optional custom paths:
 
 ```sh
-open outputs/CodexPet.app
-```
-
-The floating capsule can be dragged. Its position is saved locally with
-`UserDefaults`.
-
-## Install Codex Hooks
-
-The app works best when Codex hook events write status files into:
-
-```text
-~/.codex/statusbar/state.d
-```
-
-After building, install or repair hooks with:
-
-```sh
-node outputs/CodexPet.app/Contents/Resources/install-codex-statusbar.js --app-path outputs/CodexPet.app
-```
-
-The installer updates `~/.codex/hooks.json` and creates a backup at:
-
-```text
-~/.codex/hooks.json.bak-codex-pet
-```
-
-If hook files are unavailable, the app falls back to Codex runtime logs at:
-
-```text
-~/.codex/logs_2.sqlite
-```
-
-## Configuration
-
-Set these environment variables before launching the app if your Codex files
-live somewhere else:
-
-```sh
-CODEX_STATUSBAR_STATE_DIR=/path/to/state.d
-CODEX_LOG_DB=/path/to/logs_2.sqlite
+CODEX_STATUSBAR_STATE_DIR=/path/to/state.d open dist/CodexPet.app
+CODEX_LOG_DB=/path/to/logs_2.sqlite open dist/CodexPet.app
 ```
 
 ## Privacy
 
-Codex Pet is local-only. It does not send telemetry or network requests.
-
-The app reads local Codex state files and, as a fallback, local Codex runtime
+Codex Pet is local-only. It does not send telemetry or make network requests.
+It reads local Codex hook state files and, as a fallback, local Codex runtime
 logs. See `PRIVACY.md` for details.
 
 ## Repository Layout
 
 ```text
+scripts/                     User-facing install/start helpers
+scripts/codex-hooks/         Codex hook installer and writer scripts
 work/codex-statusbar/        Swift package and source code
-work/codex-statusbar/scripts Codex hook installer and writer scripts
 work/codex-statusbar/third_party
                               Third-party license notices
-outputs/                     Local build output helpers
+docs/screenshots/            README screenshots
+dist/                        Generated local build output, ignored by git
 ```
+
+## Third-party Code
+
+The bundled hook writer scripts are based on
+[PG408/codex-status-bar](https://github.com/PG408/codex-status-bar). Its MIT
+license and notices are preserved under `work/codex-statusbar/third_party/`.
+
+The bundled pixel cat sprite is `oneko.gif` from
+[adryd325/oneko.js](https://github.com/adryd325/oneko.js). Its MIT license is
+preserved under `work/codex-statusbar/third_party/oneko.js/`.
 
 ## License
 

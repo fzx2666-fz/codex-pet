@@ -16,10 +16,15 @@ cp ".build/release/CodexPet" "$MACOS_DIR/CodexPet"
 cp ".build/release/codex-status" "$OUTPUT_DIR/codex-status"
 chmod +x "$MACOS_DIR/CodexPet" "$OUTPUT_DIR/codex-status"
 
-RESOURCE_BUNDLE="$(find .build -path '*/release/CodexStatusBar_CodexStatusBar.bundle' -type d | head -n 1)"
+RESOURCE_BUNDLE="$(find .build -path '*/release/CodexPet_CodexStatusBar.bundle' -type d | head -n 1)"
+if [[ -z "$RESOURCE_BUNDLE" ]]; then
+  RESOURCE_BUNDLE="$(find .build -path '*/release/CodexStatusBar_CodexStatusBar.bundle' -type d | head -n 1)"
+fi
 if [[ -n "$RESOURCE_BUNDLE" ]]; then
-  rm -rf "$CONTENTS_DIR/Resources/CodexStatusBar_CodexStatusBar.bundle"
-  cp -R "$RESOURCE_BUNDLE" "$CONTENTS_DIR/Resources/CodexStatusBar_CodexStatusBar.bundle"
+  RESOURCE_BUNDLE_NAME="$(basename "$RESOURCE_BUNDLE")"
+  rm -rf "$APP_DIR/$RESOURCE_BUNDLE_NAME" "$CONTENTS_DIR/Resources/$RESOURCE_BUNDLE_NAME"
+  cp -R "$RESOURCE_BUNDLE" "$APP_DIR/$RESOURCE_BUNDLE_NAME"
+  cp -R "$RESOURCE_BUNDLE" "$CONTENTS_DIR/Resources/$RESOURCE_BUNDLE_NAME"
 fi
 
 HOOKS_DIR="$REPO_DIR/scripts/codex-hooks"

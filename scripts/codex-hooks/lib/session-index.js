@@ -2,7 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const DEFAULT_THREAD_NAME = "Unknown";
+const DEFAULT_THREAD_NAME = "";
 const SIDE_CHAT_THREAD_NAME = "Side Chat";
 
 function sessionIndexPath(env = process.env) {

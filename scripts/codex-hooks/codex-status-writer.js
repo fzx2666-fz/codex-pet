@@ -104,6 +104,11 @@ function optionalSafeId(value) {
   return value ? safeId(value) : "";
 }
 
+function meaningfulTitle(value) {
+  const title = String(value || "").trim();
+  return title && title !== "Unknown" && title !== "Untitled" ? title : "";
+}
+
 function statePathFor(sessionId) {
   return path.join(stateDir, `${safeId(sessionId)}.json`);
 }
@@ -260,7 +265,7 @@ function stateFor(payload, prev, facts, now) {
   const pid = Number(prev.pid || process.ppid || 0);
   const surface = resolveSessionSurface(payload, prev, process.env, { pid, sessionId });
   const visible = deriveVisibleState(facts);
-  const threadName = latestThreadName(sessionId);
+  const threadName = meaningfulTitle(latestThreadName(sessionId)) || meaningfulTitle(prev.threadName) || meaningfulTitle(prev.taskTitle);
   return {
     state: visible.state,
     label: visible.label,

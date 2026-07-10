@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import QuartzCore
 
@@ -82,6 +83,7 @@ struct CodexTaskStatus: Codable {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let singleInstanceLockPath = "/tmp/codex-pet.lock"
     private static let floatingWindowOriginKey = "floatingWindowOrigin"
     private static let activeHookRecordTTL: TimeInterval = 90
     private static let doneRecordTTL: TimeInterval = 12
@@ -92,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var floatingTitleLabel: NSTextField?
     private var floatingStatusLabel: NSTextField?
     private var floatingTaskLabels: [NSTextField] = []
+    private var floatingTaskStatusLabels: [NSTextField] = []
     private var floatingListToggleButton: NSButton?
     private var floatingCatView: CatStatusView?
     private var floatingHairlineView: GlassPanelView?
@@ -105,8 +108,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentTasks = [CodexTaskStatus.empty]
     private let stateDirURL = resolveStatusBarStateDirURL()
     private let logDBURL = resolveCodexLogDBURL()
+    private var singleInstanceLockFileDescriptor: Int32 = -1
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard acquireSingleInstanceLock() else {
+            NSApp.terminate(nil)
+            return
+        }
+
         NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: 28)
         statusItem.button?.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
@@ -116,6 +125,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             self?.refreshStatus()
         }
+    }
+
+    private func acquireSingleInstanceLock() -> Bool {
+        let fd = open(Self.singleInstanceLockPath, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else {
+            return true
+        }
+
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd)
+            return false
+        }
+
+        singleInstanceLockFileDescriptor = fd
+        return true
     }
 
     private func refreshStatus() {
@@ -180,10 +204,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func taskTitle(for record: HookSessionRecord) -> String {
-        let candidates = [record.taskTitle, record.threadName, record.project, record.sessionId]
-        return candidates
+        let candidates = [record.taskTitle, record.threadName, record.project]
+        let title = candidates
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .first { !$0.isEmpty && $0 != "Untitled" } ?? "Codex task"
+            .first(where: { isDisplayableTaskTitle($0) })
+        if let title {
+            return title
+        }
+        let shortId = String(record.sessionId.prefix(8))
+        return shortId.isEmpty ? "Codex task" : "Chat \(shortId)"
+    }
+
+    private func isDisplayableTaskTitle(_ title: String) -> Bool {
+        !title.isEmpty && title != "Untitled" && title != "Unknown" && title != "unknown"
     }
 
     private func isHigherPriority(_ left: CodexTaskStatus, than right: CodexTaskStatus) -> Bool {
@@ -523,11 +556,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggleButton.action = #selector(toggleFloatingTaskList)
         toggleButton.isHidden = true
 
-        let taskLabels = (0..<5).map { index in
+        let taskLabels = (0..<5).map { _ in
             let label = NSTextField(labelWithString: "")
             label.frame = NSRect(x: 22, y: 18, width: 234, height: 15)
             label.alignment = .left
             label.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+            label.lineBreakMode = .byTruncatingTail
+            label.textColor = .secondaryLabelColor
+            label.isHidden = true
+            return label
+        }
+        let taskStatusLabels = (0..<5).map { _ in
+            let label = NSTextField(labelWithString: "")
+            label.frame = NSRect(x: 240, y: 18, width: 48, height: 15)
+            label.alignment = .right
+            label.font = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .semibold)
             label.lineBreakMode = .byTruncatingTail
             label.textColor = .secondaryLabelColor
             label.isHidden = true
@@ -541,12 +584,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         material.addSubview(status)
         material.addSubview(toggleButton)
         taskLabels.forEach { material.addSubview($0) }
+        taskStatusLabels.forEach { material.addSubview($0) }
         window.contentView = material
 
         floatingWindow = window
         floatingTitleLabel = title
         floatingStatusLabel = status
         floatingTaskLabels = taskLabels
+        floatingTaskStatusLabels = taskStatusLabels
         floatingListToggleButton = toggleButton
         floatingCatView = cat
         floatingHairlineView = hairline
@@ -615,8 +660,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let rowHeight: CGFloat = 16
         let bottomPadding: CGFloat = 18
         let firstRowY = bottomPadding + (CGFloat(rowCount - 1) * rowHeight)
+        let rowX: CGFloat = 22
+        let rowWidth = size.width - 44
+        let statusColumnWidth: CGFloat = 58
+        let columnGap: CGFloat = 10
         for (index, label) in floatingTaskLabels.enumerated() {
-            label.frame = NSRect(x: 22, y: firstRowY - (CGFloat(index) * rowHeight), width: size.width - 44, height: 15)
+            let y = firstRowY - (CGFloat(index) * rowHeight)
+            label.frame = NSRect(
+                x: rowX,
+                y: y,
+                width: rowWidth - statusColumnWidth - columnGap,
+                height: 15
+            )
+            if index < floatingTaskStatusLabels.count {
+                floatingTaskStatusLabels[index].frame = NSRect(
+                    x: rowX + rowWidth - statusColumnWidth,
+                    y: y,
+                    width: statusColumnWidth,
+                    height: 15
+                )
+            }
         }
     }
 
@@ -651,33 +714,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func renderFloatingTaskList() {
         guard isFloatingHovered else {
-            for label in floatingTaskLabels {
-                label.isHidden = true
-                label.stringValue = ""
-            }
+            hideFloatingTaskRows()
             return
         }
 
         guard isFloatingTaskListExpanded else {
-            for label in floatingTaskLabels {
-                label.isHidden = true
-                label.stringValue = ""
-            }
+            hideFloatingTaskRows()
             return
         }
 
         let tasks = Array(runningFloatingTasks().prefix(floatingTaskLabels.count))
         for (index, label) in floatingTaskLabels.enumerated() {
+            let statusLabel = index < floatingTaskStatusLabels.count ? floatingTaskStatusLabels[index] : nil
             guard index < tasks.count else {
                 label.isHidden = true
                 label.stringValue = ""
+                statusLabel?.isHidden = true
+                statusLabel?.stringValue = ""
                 continue
             }
 
             let task = tasks[index]
             label.isHidden = false
-            label.stringValue = taskStatusLine(for: task)
+            statusLabel?.isHidden = false
+            label.stringValue = displayTitle(for: task)
+            statusLabel?.stringValue = shortStatusWord(for: task.state)
             label.textColor = task.state == .running ? .labelColor : .secondaryLabelColor
+            statusLabel?.textColor = task.state == .running ? .labelColor : .secondaryLabelColor
+        }
+    }
+
+    private func hideFloatingTaskRows() {
+        for label in floatingTaskLabels {
+            label.isHidden = true
+            label.stringValue = ""
+        }
+        for label in floatingTaskStatusLabels {
+            label.isHidden = true
+            label.stringValue = ""
         }
     }
 

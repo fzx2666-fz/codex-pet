@@ -46,6 +46,11 @@ function statePathFor(sessionId) {
   return path.join(stateDir, `${safeId(sessionId)}.json`);
 }
 
+function meaningfulTitle(value) {
+  const title = String(value || "").trim();
+  return title && title !== "Unknown" && title !== "Untitled" ? title : "";
+}
+
 function readPrevious(sessionId) {
   try {
     return JSON.parse(fs.readFileSync(statePathFor(sessionId), "utf8"));
@@ -72,7 +77,7 @@ function run() {
     const now = Date.now() / 1000;
     const pid = Number(process.ppid || 0);
     const surface = resolveSessionSurface(payload, {}, process.env, { pid, sessionId });
-    const threadName = latestThreadName(sessionId);
+    const threadName = meaningfulTitle(latestThreadName(sessionId));
     writeJsonAtomic(statePath, {
       state: "idle",
       label: "",
@@ -99,7 +104,7 @@ function run() {
       const now = Date.now() / 1000;
       const pid = Number(prev.pid || process.ppid || 0);
       const surface = resolveSessionSurface(payload, prev, process.env, { pid, sessionId });
-      const threadName = latestThreadName(sessionId);
+      const threadName = meaningfulTitle(latestThreadName(sessionId)) || meaningfulTitle(prev.threadName) || meaningfulTitle(prev.taskTitle);
       writeJsonAtomic(statePath, {
         ...prev,
         state: "done",
